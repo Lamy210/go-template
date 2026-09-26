@@ -23,16 +23,18 @@ type Server struct {
 }
 
 // New builds the HTTP server with bounded request sizes and timeout defaults.
-func New(cfg config.HTTPConfig, logger *slog.Logger) *Server {
+func New(cfg config.HTTPConfig, logger *slog.Logger, ready health.ReadinessCheck) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
+	// Keep the access logger outside Recoverer so recovered panics are recorded
+	// as completed 500 responses rather than skipping the post-handler log.
+	router.Use(accessLog(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
-	router.Use(accessLog(logger))
 
 	apiConfig := huma.DefaultConfig("Go Service API", apiVersion)
 	api := humachi.New(router, apiConfig)
-	health.Register(api, nil)
+	health.Register(api, loggedReadinessCheck(logger, ready))
 
 	return &Server{
 		handler: router,
@@ -61,6 +63,20 @@ func (s *Server) ListenAndServe() error {
 // Shutdown gracefully drains in-flight HTTP requests.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
+}
+
+func loggedReadinessCheck(logger *slog.Logger, ready health.ReadinessCheck) health.ReadinessCheck {
+	if ready == nil {
+		return nil
+	}
+
+	return func(ctx context.Context) error {
+		err := ready(ctx)
+		if err != nil {
+			logger.WarnContext(ctx, "readiness check failed", "error", err)
+		}
+		return err
+	}
 }
 
 func accessLog(logger *slog.Logger) func(http.Handler) http.Handler {
