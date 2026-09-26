@@ -12,10 +12,31 @@ The default architecture is a modular monolith with ports/adapters only where an
 cmd/*
   -> internal/app
       -> internal/modules/*
+      -> internal/core/*
       -> internal/platform/*
 ```
 
 `cmd/*` is composition only: configuration, dependency initialization, process start, and shutdown. Business rules belong in feature-oriented packages under `internal/modules`.
+
+`internal/core` contains only transport-neutral, architecture-level contracts that are genuinely shared. It must not become a `common` or `utils` dumping ground. See [core.md](core.md).
+
+Platform packages own protocol and infrastructure translation. For example, application error kinds live in `internal/core/apperror`, while HTTP status codes and the JSON error response live in `internal/platform/httpserver`.
+
+Health endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be a business module.
+
+## Dependency direction
+
+```text
+feature/domain
+     ^
+application
+     ^
+platform adapters
+
+core <- feature/application/platform
+```
+
+Core may depend on the Go standard library only. Core must not import Huma, chi, PostgreSQL, NATS, or feature packages.
 
 ## Current bootstrap
 
@@ -23,6 +44,8 @@ The first increment provides:
 
 - typed environment configuration with startup validation;
 - structured `log/slog` logging;
+- transport-neutral application error semantics;
+- safe HTTP error translation with stable codes and request IDs;
 - a bounded HTTP server with explicit timeouts and request/body limits;
 - graceful shutdown;
 - Huma OpenAPI 3.1 generation on top of chi;

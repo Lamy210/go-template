@@ -27,13 +27,18 @@ fix(config): reject invalid timeout values
 - Prefer simple, explicit Go over framework-heavy abstractions.
 - Use early returns and wrap errors with useful context.
 - Keep package APIs small and package names meaningful.
-- Do not create catch-all `utils`, `common`, or `helpers` packages.
+- Do not create catch-all `utils`, `common`, `helpers`, or `misc` packages.
+- Keep one-off helpers unexported beside their owner.
+- Promote code into `internal/core` only when it is transport-neutral, stable, and genuinely shared.
 - Do not put business logic in `cmd/*` or HTTP handlers.
 - Add interfaces at architectural boundaries, not solely to make mocking easier.
 - Pass `context.Context` through I/O paths; do not use it as a dependency container.
-- Avoid hidden globals for database handles, loggers, or configuration.
+- Avoid hidden globals for database handles, loggers, configuration, or error-model mutation.
 - Bound concurrency, retries, request sizes, and timeouts.
-- Never log secrets, passwords, access tokens, or authorization headers.
+- Never log secrets, passwords, access tokens, authorization headers, or raw dependency errors that may contain them.
+- Use `errors.Is` / `errors.AsType` for wrapped-error inspection rather than branching on error strings.
+
+See [core.md](core.md) for core, common-definition, helper, and error ownership rules.
 
 ## Local commands
 

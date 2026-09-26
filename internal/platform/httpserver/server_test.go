@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -34,7 +35,7 @@ func TestHealthEndpoints(t *testing.T) {
 	}
 }
 
-func TestReadinessFailureDoesNotExposeInternalError(t *testing.T) {
+func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 	t.Parallel()
 
 	const internalDetail = "database connection failed: password=secret"
@@ -52,6 +53,24 @@ func TestReadinessFailureDoesNotExposeInternalError(t *testing.T) {
 	}
 	if strings.Contains(res.Body.String(), internalDetail) {
 		t.Fatalf("readiness response exposed internal error: %s", res.Body.String())
+	}
+
+	var body struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode readiness error: %v; body=%s", err, res.Body.String())
+	}
+	if body.Code != "service_not_ready" {
+		t.Fatalf("code = %q, want service_not_ready", body.Code)
+	}
+	if body.Message != "service not ready" {
+		t.Fatalf("message = %q, want service not ready", body.Message)
+	}
+	if body.RequestID == "" {
+		t.Fatal("request_id is empty")
 	}
 }
 

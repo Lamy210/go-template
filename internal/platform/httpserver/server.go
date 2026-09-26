@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Lamy210/go-template/internal/config"
-	"github.com/Lamy210/go-template/internal/modules/health"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
@@ -23,7 +22,7 @@ type Server struct {
 }
 
 // New builds the HTTP server with bounded request sizes and timeout defaults.
-func New(cfg config.HTTPConfig, logger *slog.Logger, ready health.ReadinessCheck) *Server {
+func New(cfg config.HTTPConfig, logger *slog.Logger, ready ReadinessCheck) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	// Keep the access logger outside Recoverer so recovered panics are recorded
@@ -34,7 +33,7 @@ func New(cfg config.HTTPConfig, logger *slog.Logger, ready health.ReadinessCheck
 
 	apiConfig := huma.DefaultConfig("Go Service API", apiVersion)
 	api := humachi.New(router, apiConfig)
-	health.Register(api, ready)
+	registerHealth(api, ready)
 
 	return &Server{
 		handler: router,
