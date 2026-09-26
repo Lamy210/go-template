@@ -109,6 +109,16 @@ jobs:
         run: |
           docker run --rm             -v "$PWD:/workspace"             -w /workspace             "$ATLAS_IMAGE"             migrate hash --dir "file://migrations"
 
+      - name: Print generated bootstrap artifacts
+        run: |
+          echo "===== migrations/atlas.sum ====="
+          cat migrations/atlas.sum
+          echo "===== sqlc generated files ====="
+          for file in internal/modules/example/store/sqlc/*.go; do
+            echo "===== $file ====="
+            cat "$file"
+          done
+
       - name: Apply fresh database migrations
         run: |
           docker run --rm --network host             -v "$PWD:/workspace"             -w /workspace             "$ATLAS_IMAGE"             migrate apply             --url "$DATABASE_URL"             --dir "file://migrations"
