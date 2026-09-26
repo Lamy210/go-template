@@ -8,9 +8,10 @@ MODULE_PATH := $(shell $(GO) list -m)
 VERSION ?= dev
 COMMIT ?= unknown
 BUILD_DATE ?= unknown
-BUILD_LDFLAGS := -s -w 	-X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' 	-X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' 	-X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
+BUILD_LDFLAGS := -s -w -X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' -X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' -X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
 
-.PHONY: dev test test-integration fmt lint vet build vuln check generate generate-check 	db-up db-down migrate-hash migrate-status migrate-up migrate-diff
+.PHONY: dev test test-integration fmt lint vet build vuln check generate generate-check
+.PHONY: db-up db-down migrate-hash migrate-status migrate-up migrate-diff
 
 dev:
 	$(GO) run ./cmd/api
@@ -65,6 +66,9 @@ migrate-up:
 migrate-diff:
 	@test -n "$(NAME)" || (echo "NAME is required" && exit 1)
 	@test -n "$(DATABASE_DEV_URL)" || (echo "DATABASE_DEV_URL is required" && exit 1)
-	@$(ATLAS) migrate diff "$(NAME)" 		--dir "file://migrations" 		--to "file://sql/schema/schema.sql" 		--dev-url "$(DATABASE_DEV_URL)"
+	@$(ATLAS) migrate diff "$(NAME)" \
+		--dir "file://migrations" \
+		--to "file://sql/schema/schema.sql" \
+		--dev-url "$(DATABASE_DEV_URL)"
 
 check: vet test build

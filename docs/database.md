@@ -1,7 +1,8 @@
 # PostgreSQL Profile
 
 The PostgreSQL profile is optional. A service without PostgreSQL keeps
-`DATABASE_ENABLED=false` and starts without a database dependency.
+`DATABASE_ENABLED=false` and starts without a database dependency. When the
+profile is disabled, PostgreSQL-specific values are not parsed or validated.
 
 ## Stack
 
@@ -26,8 +27,11 @@ DATABASE_URL=postgres://...
 Pool size, connection lifetime, health period, connect timeout, and readiness
 timeout are separately configurable in `.env.example`.
 
-The database URL is treated as a secret: startup and readiness errors never
-append the URL to their own messages, and the application does not log it.
+The database URL is treated as a secret. Database infrastructure errors retain
+their underlying cause for `errors.Is` / `errors.As`, but their normal
+`Error()` string contains only the safe operation name. This prevents raw
+driver diagnostics or connection details from entering ordinary application
+logs.
 
 ## Local PostgreSQL
 
@@ -74,7 +78,9 @@ make migrate-up DATABASE_URL='postgres://...'
 To generate a migration from the desired SQL schema:
 
 ```bash
-make migrate-diff   NAME=add_example_field   DATABASE_DEV_URL='docker://postgres/18/dev?search_path=public'
+make migrate-diff \
+  NAME=add_example_field \
+  DATABASE_DEV_URL='docker://postgres/18/dev?search_path=public'
 ```
 
 Atlas Community supports `migrate diff`, `apply`, and `status`, but not
@@ -84,11 +90,23 @@ unavailable command.
 
 Application startup never runs migrations automatically.
 
+## Schema consistency
+
+CI does more than check that migrations execute. After applying the entire
+history to a fresh PostgreSQL database, Atlas runs `schema diff` against
+`sql/schema/schema.sql` and excludes only `atlas_schema_revisions`. Any
+remaining SQL plan is treated as drift and fails the build.
+
+This keeps the sqlc schema input and migration history from silently diverging.
+
 ## Transactions
 
 `internal/platform/database.InTx` is a small boundary around pgx transaction
 lifecycle. Use cases decide when multiple repository operations belong to one
 transaction; repositories do not start transactions on their own.
+
+Integration tests verify that rollback occurs and that the original callback
+error remains discoverable through `errors.Is`.
 
 ## Readiness and shutdown
 
