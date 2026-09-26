@@ -94,6 +94,29 @@ func TestLoadRejectsInvalidDuration(t *testing.T) {
 	}
 }
 
+func TestDisabledDatabaseIgnoresDatabaseSpecificValues(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"DATABASE_ENABLED":   "false",
+			"DATABASE_MAX_CONNS": "not-an-integer",
+			"DATABASE_URL":       "not-a-postgres-url",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatalf("load disabled database config: %v", err)
+	}
+	if cfg.Database.Enabled {
+		t.Fatal("Database.Enabled = true, want false")
+	}
+	if cfg.Database.MaxConns != defaultDatabaseMaxConns {
+		t.Fatalf("Database.MaxConns = %d, want default %d", cfg.Database.MaxConns, defaultDatabaseMaxConns)
+	}
+}
+
 func TestLoadRejectsEnabledDatabaseWithoutURL(t *testing.T) {
 	t.Parallel()
 
