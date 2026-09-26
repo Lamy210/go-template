@@ -39,7 +39,10 @@ func Register(api huma.API, ready ReadinessCheck) {
 	}, func(ctx context.Context, _ *struct{}) (*response, error) {
 		if ready != nil {
 			if err := ready(ctx); err != nil {
-				return nil, huma.Error503ServiceUnavailable("service not ready", err)
+				// Do not attach the underlying error to the response. Huma
+				// serializes attached errors into the RFC 9457 error body,
+				// which could expose dependency or infrastructure details.
+				return nil, huma.Error503ServiceUnavailable("service not ready")
 			}
 		}
 
