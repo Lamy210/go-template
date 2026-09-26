@@ -38,7 +38,7 @@ func TestHealthEndpoints(t *testing.T) {
 func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 	t.Parallel()
 
-	const internalDetail = "database connection failed: password=secret"
+	const internalDetail = "opaque internal readiness diagnostic"
 	ready := func(context.Context) error {
 		return errors.New(internalDetail)
 	}

@@ -60,8 +60,8 @@ func TestToHTTPErrorFindsWrappedApplicationError(t *testing.T) {
 func TestToHTTPErrorHidesUnknownError(t *testing.T) {
 	t.Parallel()
 
-	const secret = "postgres://user:password@db/private"
-	mapped := toHTTPError(context.Background(), errors.New(secret))
+	const internalDetail = "opaque internal dependency diagnostic"
+	mapped := toHTTPError(context.Background(), errors.New(internalDetail))
 	response := mapped.(*errorResponse)
 
 	if response.GetStatus() != http.StatusInternalServerError {
@@ -70,7 +70,7 @@ func TestToHTTPErrorHidesUnknownError(t *testing.T) {
 	if response.Code != internalErrorCode {
 		t.Fatalf("code = %q, want %q", response.Code, internalErrorCode)
 	}
-	if strings.Contains(response.Error(), secret) {
+	if strings.Contains(response.Error(), internalDetail) {
 		t.Fatalf("response exposed internal error: %q", response.Error())
 	}
 }

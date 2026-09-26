@@ -31,8 +31,7 @@ func New(cfg config.HTTPConfig, logger *slog.Logger, ready ReadinessCheck) *Serv
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
-	apiConfig := huma.DefaultConfig("Go Service API", apiVersion)
-	api := humachi.New(router, apiConfig)
+	api := humachi.New(router, newAPIConfig())
 	registerHealth(api, ready)
 
 	return &Server{
@@ -47,6 +46,12 @@ func New(cfg config.HTTPConfig, logger *slog.Logger, ready ReadinessCheck) *Serv
 			MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		},
 	}
+}
+
+func newAPIConfig() huma.Config {
+	cfg := huma.DefaultConfig("Go Service API", apiVersion)
+	cfg.Transformers = append(cfg.Transformers, transformHumaError)
+	return cfg
 }
 
 // Handler exposes the configured HTTP handler for tests and embedding.

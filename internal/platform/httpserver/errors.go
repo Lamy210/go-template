@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/Lamy210/go-template/internal/core/apperror"
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -55,7 +57,7 @@ func toHTTPError(ctx context.Context, err error) error {
 	status := statusForKind(appErr.Kind())
 	code := string(appErr.Code())
 	if code == "" {
-		code = fallbackCodeForKind(appErr.Kind())
+		code = fallbackCodeForStatus(status)
 	}
 
 	message := appErr.PublicMessage()
@@ -74,6 +76,53 @@ func toHTTPError(ctx context.Context, err error) error {
 	}
 
 	return newErrorResponse(ctx, status, code, message, httpDetails)
+}
+
+// transformHumaError normalizes Huma-generated validation and framework errors
+// into the same public response contract without mutating Huma's global error
+// factory. Raw 5xx details are intentionally discarded.
+func transformHumaError(ctx huma.Context, statusText string, value any) (any, error) {
+	model, ok := value.(*huma.ErrorModel)
+	if !ok {
+		return value, nil
+	}
+
+	status := model.Status
+	if status == 0 {
+		if parsed, err := strconv.Atoi(statusText); err == nil {
+			status = parsed
+		}
+	}
+	if status == 0 {
+		status = http.StatusInternalServerError
+	}
+
+	message := model.Detail
+	if status >= http.StatusInternalServerError || message == "" {
+		message = fallbackMessageForStatus(status)
+	}
+
+	var details []errorDetail
+	if status < http.StatusInternalServerError {
+		details = make([]errorDetail, 0, len(model.Errors))
+		for _, detail := range model.Errors {
+			if detail == nil {
+				continue
+			}
+			details = append(details, errorDetail{
+				Field:   detail.Location,
+				Message: detail.Message,
+			})
+		}
+	}
+
+	return newErrorResponse(
+		ctx.Context(),
+		status,
+		fallbackCodeForStatus(status),
+		message,
+		details,
+	), nil
 }
 
 func newErrorResponse(
@@ -115,30 +164,37 @@ func statusForKind(kind apperror.Kind) int {
 	}
 }
 
-func fallbackCodeForKind(kind apperror.Kind) string {
-	switch kind {
-	case apperror.KindInvalidArgument:
-		return "invalid_argument"
-	case apperror.KindUnauthenticated:
+func fallbackCodeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return "invalid_request"
+	case http.StatusUnauthorized:
 		return "unauthenticated"
-	case apperror.KindPermissionDenied:
+	case http.StatusForbidden:
 		return "permission_denied"
-	case apperror.KindNotFound:
+	case http.StatusNotFound:
 		return "not_found"
-	case apperror.KindConflict:
+	case http.StatusConflict:
 		return "conflict"
-	case apperror.KindResourceExhausted:
+	case http.StatusContentTooLarge:
+		return "request_too_large"
+	case http.StatusUnsupportedMediaType:
+		return "unsupported_media_type"
+	case http.StatusTooManyRequests:
 		return "resource_exhausted"
-	case apperror.KindUnavailable:
+	case http.StatusServiceUnavailable:
 		return "unavailable"
 	default:
-		return internalErrorCode
+		if status >= http.StatusInternalServerError {
+			return internalErrorCode
+		}
+		return "http_error"
 	}
 }
 
 func fallbackMessageForStatus(status int) string {
 	switch status {
-	case http.StatusBadRequest:
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		return "invalid request"
 	case http.StatusUnauthorized:
 		return "authentication required"
@@ -148,11 +204,18 @@ func fallbackMessageForStatus(status int) string {
 		return "resource not found"
 	case http.StatusConflict:
 		return "resource conflict"
+	case http.StatusContentTooLarge:
+		return "request body too large"
+	case http.StatusUnsupportedMediaType:
+		return "unsupported media type"
 	case http.StatusTooManyRequests:
 		return "resource limit exceeded"
 	case http.StatusServiceUnavailable:
 		return "service unavailable"
 	default:
-		return "internal server error"
+		if status >= http.StatusInternalServerError {
+			return "internal server error"
+		}
+		return http.StatusText(status)
 	}
 }
