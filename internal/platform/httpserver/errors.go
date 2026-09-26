@@ -176,7 +176,7 @@ func fallbackCodeForStatus(status int) string {
 		return "not_found"
 	case http.StatusConflict:
 		return "conflict"
-	case http.StatusContentTooLarge:
+	case http.StatusRequestEntityTooLarge:
 		return "request_too_large"
 	case http.StatusUnsupportedMediaType:
 		return "unsupported_media_type"
@@ -204,7 +204,7 @@ func fallbackMessageForStatus(status int) string {
 		return "resource not found"
 	case http.StatusConflict:
 		return "resource conflict"
-	case http.StatusContentTooLarge:
+	case http.StatusRequestEntityTooLarge:
 		return "request body too large"
 	case http.StatusUnsupportedMediaType:
 		return "unsupported media type"
