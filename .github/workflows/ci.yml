@@ -48,6 +48,9 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Docker build
+        run: docker build --tag go-template:ci .
+
       - name: Lint
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 
