@@ -32,14 +32,14 @@ func TestLoadOverrides(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"SERVICE_NAME":              "example-api",
-		"APP_ENV":                   "production",
-		"HTTP_ADDR":                 "127.0.0.1:9090",
-		"LOG_LEVEL":                 "debug",
-		"HTTP_SHUTDOWN_TIMEOUT":     "3s",
-		"HTTP_MAX_HEADER_BYTES":     "2048",
-		"HTTP_MAX_BODY_BYTES":       "4096",
-		"HTTP_READ_HEADER_TIMEOUT":  "2s",
+		"SERVICE_NAME":             "example-api",
+		"APP_ENV":                  "production",
+		"HTTP_ADDR":                "127.0.0.1:9090",
+		"LOG_LEVEL":                "debug",
+		"HTTP_SHUTDOWN_TIMEOUT":    "3s",
+		"HTTP_MAX_HEADER_BYTES":    "2048",
+		"HTTP_MAX_BODY_BYTES":      "4096",
+		"HTTP_READ_HEADER_TIMEOUT": "2s",
 	}
 
 	cfg, err := load(func(key string) (string, bool) {
