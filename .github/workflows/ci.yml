@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NATS_URL: nats://127.0.0.1:4222
-      NATS_IMAGE: nats:2.15.0-alpine
+      NATS_IMAGE: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
 
     steps:
       - name: Checkout
