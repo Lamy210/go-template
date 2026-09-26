@@ -2,6 +2,12 @@ GO ?= go
 GOLANGCI_LINT_VERSION ?= v2.14.0
 GOVULNCHECK_VERSION ?= v1.8.0
 
+MODULE_PATH := $(shell $(GO) list -m)
+VERSION ?= dev
+COMMIT ?= unknown
+BUILD_DATE ?= unknown
+BUILD_LDFLAGS := -s -w 	-X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' 	-X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' 	-X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
+
 .PHONY: dev test fmt lint vet build vuln check
 
 dev:
@@ -21,7 +27,7 @@ vet:
 
 build:
 	mkdir -p bin
-	CGO_ENABLED=0 $(GO) build -trimpath -o bin/api ./cmd/api
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="$(BUILD_LDFLAGS)" -o bin/api ./cmd/api
 
 vuln:
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...

@@ -1,6 +1,19 @@
 # Core and Shared Code Policy
 
-## Purpose
+## Two meanings of "core"
+
+The **Core profile** is the minimum production-ready capability set shared by every generated service: configuration, logging, error handling, graceful shutdown, build metadata, tests, lint/security gates, Docker, and CI.
+
+The directory `internal/core` is narrower. It is reserved for stable, transport-neutral architecture primitives. A Core-profile capability does not automatically belong in `internal/core`.
+
+For example:
+
+- application error semantics belong in `internal/core/apperror`;
+- build metadata belongs in `internal/buildinfo`;
+- typed process configuration belongs in `internal/config`;
+- HTTP response mapping belongs in `internal/platform/httpserver`.
+
+## Purpose of `internal/core`
 
 `internal/core` is not a dumping ground for reusable-looking code.
 

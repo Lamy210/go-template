@@ -46,10 +46,11 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Build
-        run: go build ./...
+        run: make build VERSION=ci COMMIT="$GITHUB_SHA" BUILD_DATE=unknown
 
       - name: Docker build
-        run: docker build --tag go-template:ci .
+        run: |
+          docker build             --build-arg VERSION=ci             --build-arg COMMIT="$GITHUB_SHA"             --build-arg BUILD_DATE=unknown             --tag go-template:ci .
 
       - name: Lint
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...

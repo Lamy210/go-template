@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	defaultServiceName       = "go-service"
 	defaultEnvironment       = "development"
 	defaultHTTPAddr          = ":8080"
 	defaultLogLevel          = "INFO"
@@ -23,6 +24,7 @@ const (
 
 // Config contains process-wide configuration loaded once at startup.
 type Config struct {
+	ServiceName string
 	Environment string
 	LogLevel    string
 	HTTP        HTTPConfig
@@ -78,6 +80,7 @@ func load(lookup lookupEnv) (Config, error) {
 	}
 
 	cfg := Config{
+		ServiceName: stringValue(lookup, "SERVICE_NAME", defaultServiceName),
 		Environment: stringValue(lookup, "APP_ENV", defaultEnvironment),
 		LogLevel:    strings.ToUpper(stringValue(lookup, "LOG_LEVEL", defaultLogLevel)),
 		HTTP: HTTPConfig{
@@ -100,6 +103,9 @@ func load(lookup lookupEnv) (Config, error) {
 
 // Validate fails fast on configuration that would result in an unsafe server.
 func (c Config) Validate() error {
+	if strings.TrimSpace(c.ServiceName) == "" {
+		return fmt.Errorf("SERVICE_NAME must not be empty")
+	}
 	if strings.TrimSpace(c.Environment) == "" {
 		return fmt.Errorf("APP_ENV must not be empty")
 	}

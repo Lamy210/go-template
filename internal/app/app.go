@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 
+	"github.com/Lamy210/go-template/internal/buildinfo"
 	"github.com/Lamy210/go-template/internal/config"
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 )
@@ -20,7 +22,8 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger, err := newLogger(cfg.LogLevel)
+	info := buildinfo.Current()
+	logger, err := newLogger(os.Stdout, cfg.LogLevel, cfg.ServiceName, cfg.Environment, info)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)
 	}
@@ -35,7 +38,11 @@ func Run(ctx context.Context) error {
 		}
 	}()
 
-	logger.Info("http server started", "addr", cfg.HTTP.Addr, "environment", cfg.Environment)
+	logger.Info("http server started",
+		"addr", cfg.HTTP.Addr,
+		"commit", info.Commit,
+		"build_date", info.BuildDate,
+	)
 
 	select {
 	case err := <-errCh:
@@ -55,11 +62,22 @@ func Run(ctx context.Context) error {
 	return nil
 }
 
-func newLogger(levelText string) (*slog.Logger, error) {
+func newLogger(
+	out io.Writer,
+	levelText string,
+	serviceName string,
+	environment string,
+	info buildinfo.Info,
+) (*slog.Logger, error) {
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(levelText)); err != nil {
 		return nil, fmt.Errorf("parse log level %q: %w", levelText, err)
 	}
 
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})), nil
+	logger := slog.New(slog.NewJSONHandler(out, &slog.HandlerOptions{Level: level}))
+	return logger.With(
+		"service", serviceName,
+		"version", info.Version,
+		"environment", environment,
+	), nil
 }

@@ -14,6 +14,9 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("load defaults: %v", err)
 	}
 
+	if cfg.ServiceName != defaultServiceName {
+		t.Fatalf("ServiceName = %q, want %q", cfg.ServiceName, defaultServiceName)
+	}
 	if cfg.Environment != defaultEnvironment {
 		t.Fatalf("Environment = %q, want %q", cfg.Environment, defaultEnvironment)
 	}
@@ -29,13 +32,14 @@ func TestLoadOverrides(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"APP_ENV":                  "production",
-		"HTTP_ADDR":                "127.0.0.1:9090",
-		"LOG_LEVEL":                "debug",
-		"HTTP_SHUTDOWN_TIMEOUT":    "3s",
-		"HTTP_MAX_HEADER_BYTES":    "2048",
-		"HTTP_MAX_BODY_BYTES":      "4096",
-		"HTTP_READ_HEADER_TIMEOUT": "2s",
+		"SERVICE_NAME":              "example-api",
+		"APP_ENV":                   "production",
+		"HTTP_ADDR":                 "127.0.0.1:9090",
+		"LOG_LEVEL":                 "debug",
+		"HTTP_SHUTDOWN_TIMEOUT":     "3s",
+		"HTTP_MAX_HEADER_BYTES":     "2048",
+		"HTTP_MAX_BODY_BYTES":       "4096",
+		"HTTP_READ_HEADER_TIMEOUT":  "2s",
 	}
 
 	cfg, err := load(func(key string) (string, bool) {
@@ -46,6 +50,9 @@ func TestLoadOverrides(t *testing.T) {
 		t.Fatalf("load overrides: %v", err)
 	}
 
+	if cfg.ServiceName != "example-api" {
+		t.Fatalf("ServiceName = %q, want example-api", cfg.ServiceName)
+	}
 	if cfg.LogLevel != "DEBUG" {
 		t.Fatalf("LogLevel = %q, want DEBUG", cfg.LogLevel)
 	}
@@ -71,6 +78,20 @@ func TestLoadRejectsInvalidDuration(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "HTTP_READ_TIMEOUT") {
 		t.Fatalf("load error = %v, want HTTP_READ_TIMEOUT parse error", err)
+	}
+}
+
+func TestValidateRejectsEmptyServiceName(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(func(string) (string, bool) { return "", false })
+	if err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+	cfg.ServiceName = " "
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want error")
 	}
 }
 
