@@ -36,6 +36,15 @@ func loadDatabase(lookup lookupEnv) (DatabaseConfig, error) {
 	if err != nil {
 		return DatabaseConfig{}, err
 	}
+
+	cfg := defaultDatabaseConfig()
+	cfg.Enabled = enabled
+	if !enabled {
+		// A disabled optional profile must not make a DB-free service fail
+		// because of stale or otherwise irrelevant PostgreSQL settings.
+		return cfg, nil
+	}
+
 	maxConns, err := int32Value(lookup, "DATABASE_MAX_CONNS", defaultDatabaseMaxConns)
 	if err != nil {
 		return DatabaseConfig{}, err
@@ -65,26 +74,40 @@ func loadDatabase(lookup lookupEnv) (DatabaseConfig, error) {
 		return DatabaseConfig{}, err
 	}
 
-	cfg := DatabaseConfig{
-		Enabled:           enabled,
-		URL:               stringValue(lookup, "DATABASE_URL", ""),
-		MaxConns:          maxConns,
-		MinConns:          minConns,
-		MaxConnLifetime:   maxConnLifetime,
-		MaxConnIdleTime:   maxConnIdleTime,
-		HealthCheckPeriod: healthCheckPeriod,
-		ConnectTimeout:    connectTimeout,
-		HealthTimeout:     healthTimeout,
-	}
+	cfg.URL = stringValue(lookup, "DATABASE_URL", "")
+	cfg.MaxConns = maxConns
+	cfg.MinConns = minConns
+	cfg.MaxConnLifetime = maxConnLifetime
+	cfg.MaxConnIdleTime = maxConnIdleTime
+	cfg.HealthCheckPeriod = healthCheckPeriod
+	cfg.ConnectTimeout = connectTimeout
+	cfg.HealthTimeout = healthTimeout
+
 	if err := cfg.Validate(); err != nil {
 		return DatabaseConfig{}, err
 	}
 	return cfg, nil
 }
 
+func defaultDatabaseConfig() DatabaseConfig {
+	return DatabaseConfig{
+		Enabled:           defaultDatabaseEnabled,
+		MaxConns:          defaultDatabaseMaxConns,
+		MinConns:          defaultDatabaseMinConns,
+		MaxConnLifetime:   defaultDatabaseMaxConnLifetime,
+		MaxConnIdleTime:   defaultDatabaseMaxConnIdleTime,
+		HealthCheckPeriod: defaultDatabaseHealthCheckPeriod,
+		ConnectTimeout:    defaultDatabaseConnectTimeout,
+		HealthTimeout:     defaultDatabaseHealthTimeout,
+	}
+}
+
 // Validate verifies PostgreSQL pool settings without logging the database URL.
 func (c DatabaseConfig) Validate() error {
-	if c.Enabled && strings.TrimSpace(c.URL) == "" {
+	if !c.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(c.URL) == "" {
 		return fmt.Errorf("DATABASE_URL must not be empty when DATABASE_ENABLED=true")
 	}
 	if c.MaxConns <= 0 {
