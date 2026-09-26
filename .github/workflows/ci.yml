@@ -37,7 +37,8 @@ jobs:
 
       - name: Verify formatting
         run: |
-          test -z "$(gofmt -l .)"
+          gofmt -w $(find . -name '*.go' -not -path './vendor/*')
+          git diff --exit-code -- '*.go'
 
       - name: Vet
         run: go vet ./...
