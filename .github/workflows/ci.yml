@@ -149,6 +149,9 @@ jobs:
             exit 1
           fi
 
+      - name: Download integration-test modules
+        run: cd test/integration && go mod download
+
       - name: Run database integration tests
         run: cd test/integration && go test ./...
 
@@ -170,20 +173,14 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Resolve integration-test module
+      - name: Verify integration-test module
         run: |
           cd test/integration
           go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          go mod download
 
       - name: Run Testcontainers PostgreSQL integration
         run: |
           cd test/integration
           go test ./...
-
-      - name: Show integration module metadata
-        if: always()
-        run: |
-          echo '--- test/integration/go.mod ---'
-          cat test/integration/go.mod
-          echo '--- test/integration/go.sum ---'
-          cat test/integration/go.sum
