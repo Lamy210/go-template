@@ -157,3 +157,46 @@ jobs:
           git add -N migrations/atlas.sum
           find internal/modules/example/store/sqlc -name '*.go' -print0 | xargs -0 -r git add -N
           git diff --exit-code -- migrations/atlas.sum internal/modules/example/store/sqlc
+
+
+  messaging:
+    runs-on: ubuntu-latest
+    env:
+      NATS_URL: nats://127.0.0.1:4222
+      NATS_IMAGE: nats:2.15.0-alpine
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Start JetStream-enabled NATS
+        run: |
+          docker run -d --name nats-ci \
+            -p 4222:4222 \
+            -p 8222:8222 \
+            "$NATS_IMAGE" \
+            -js -m 8222
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8222/healthz" >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs nats-ci
+          exit 1
+
+      - name: Run messaging integration tests
+        run: go test -tags=messaging ./test/integration/...
+
+      - name: Stop NATS
+        if: always()
+        run: docker rm -f nats-ci || true

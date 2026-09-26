@@ -29,6 +29,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Database.Enabled {
 		t.Fatal("Database.Enabled = true, want false")
 	}
+	if cfg.NATS.Enabled {
+		t.Fatal("NATS.Enabled = true, want false")
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -114,6 +117,45 @@ func TestDisabledDatabaseIgnoresDatabaseSpecificValues(t *testing.T) {
 	}
 	if cfg.Database.MaxConns != defaultDatabaseMaxConns {
 		t.Fatalf("Database.MaxConns = %d, want default %d", cfg.Database.MaxConns, defaultDatabaseMaxConns)
+	}
+}
+
+func TestDisabledNATSIgnoresNATSSpecificValues(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"NATS_ENABLED":        "false",
+			"NATS_MAX_RECONNECTS": "-1",
+			"NATS_STREAM_MAX_BYTES": "not-an-integer",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatalf("load disabled NATS config: %v", err)
+	}
+	if cfg.NATS.Enabled {
+		t.Fatal("NATS.Enabled = true, want false")
+	}
+	if cfg.NATS.MaxReconnects != defaultNATSMaxReconnects {
+		t.Fatalf("NATS.MaxReconnects = %d, want default %d", cfg.NATS.MaxReconnects, defaultNATSMaxReconnects)
+	}
+}
+
+func TestLoadRejectsUnboundedNATSReconnects(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"NATS_ENABLED":        "true",
+			"NATS_MAX_RECONNECTS": "-1",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil || !strings.Contains(err.Error(), "NATS_MAX_RECONNECTS") {
+		t.Fatalf("load error = %v, want NATS_MAX_RECONNECTS validation error", err)
 	}
 }
 

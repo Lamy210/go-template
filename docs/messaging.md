@@ -1,0 +1,86 @@
+# Async Worker / NATS JetStream Profile
+
+The NATS profile is optional. `NATS_ENABLED=false` is the default, and a
+service that does not use messaging does not parse or validate NATS-specific
+settings.
+
+## Stack
+
+- nats-server 2.15.x
+- nats.go 1.54.x
+- modern `github.com/nats-io/nats.go/jetstream` API
+
+The profile deliberately overrides unbounded server/client defaults.
+
+## Bounded defaults
+
+The NATS client default reconnect limit is finite, but the template still sets
+it explicitly. Negative reconnect counts are rejected because they mean retry
+forever.
+
+JetStream consumers are also configured explicitly:
+
+- explicit acknowledgements;
+- finite processing attempts;
+- finite quarantine-publish attempts;
+- finite `MaxAckPending`;
+- bounded handler and ack timeouts;
+- delayed retry rather than immediate hot-loop redelivery.
+
+JetStream streams are created with finite message count, byte, age, consumer,
+and single-message-size limits. The template never relies on JetStream's
+unlimited `MaxMsgs` / `MaxBytes` defaults.
+
+## Idempotent publishing
+
+`messaging.Client.Publish` accepts a stable message ID and maps it to
+JetStream's message-ID deduplication. Callers should use an operation/event ID,
+not generate a new ID on every retry.
+
+## Retry and quarantine
+
+`RunConsumer` separates normal processing attempts from quarantine attempts.
+
+1. A handler failure is retried with `NakWithDelay` while normal attempts remain.
+2. After normal attempts are exhausted, the original payload is synchronously
+   published to the configured quarantine subject.
+3. The quarantine publish uses a stable ID derived from stream + sequence, so a
+   repeated quarantine attempt is deduplicated.
+4. Only after the quarantine publish succeeds is the original message
+   acknowledged with `DoubleAck`.
+5. If quarantine publishing repeatedly fails, the worker returns an
+   infrastructure error instead of retrying forever.
+
+Handler error text is not copied into quarantine headers or generic
+infrastructure logs.
+
+## Graceful shutdown
+
+The consumer uses JetStream `ConsumeContext.Drain` on normal cancellation so
+buffered deliveries can finish. Handler and acknowledgement work remains
+bounded by explicit timeouts. The NATS connection then has its own bounded
+drain lifecycle.
+
+This avoids leaving a live consume goroutine after process shutdown.
+
+## Local development
+
+```bash
+docker compose up -d nats
+```
+
+JetStream is enabled on port 4222. The monitoring endpoint is exposed on 8222
+for local diagnostics.
+
+## Integration tests
+
+The messaging CI job starts a real JetStream-enabled nats-server and verifies:
+
+- stream provisioning with explicit limits;
+- message-ID deduplication;
+- delayed retry followed by successful acknowledgement;
+- bounded failure followed by quarantine;
+- consumer drain on cancellation;
+- NATS/JetStream readiness.
+
+The profile remains independent of PostgreSQL.

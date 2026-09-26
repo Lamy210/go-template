@@ -29,6 +29,7 @@ type Config struct {
 	LogLevel    string
 	HTTP        HTTPConfig
 	Database    DatabaseConfig
+	NATS        NATSConfig
 }
 
 // HTTPConfig contains HTTP server limits and timeout policy.
@@ -83,6 +84,10 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	natsConfig, err := loadNATS(lookup)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		ServiceName: stringValue(lookup, "SERVICE_NAME", defaultServiceName),
@@ -99,6 +104,7 @@ func load(lookup lookupEnv) (Config, error) {
 			MaxBodyBytes:      maxBodyBytes,
 		},
 		Database: databaseConfig,
+		NATS:     natsConfig,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -140,6 +146,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("HTTP_MAX_BODY_BYTES must be positive")
 	}
 	if err := c.Database.Validate(); err != nil {
+		return err
+	}
+	if err := c.NATS.Validate(); err != nil {
 		return err
 	}
 	return nil
