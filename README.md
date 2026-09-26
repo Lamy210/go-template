@@ -28,6 +28,7 @@ Useful endpoints:
 
 - `GET /health/live`
 - `GET /health/ready`
+- `GET /version`
 - `GET /openapi.json`
 - `GET /docs`
 
@@ -49,7 +50,7 @@ Invalid or unsafe configuration fails fast before the server begins accepting tr
 
 ## Build metadata
 
-Binary metadata is injected at link time through `internal/buildinfo`.
+Binary metadata is injected at link time through `internal/buildinfo` and exposed through `GET /version`.
 
 ```bash
 make build   VERSION=v1.2.3   COMMIT="$(git rev-parse HEAD)"   BUILD_DATE=2026-09-27T00:00:00Z

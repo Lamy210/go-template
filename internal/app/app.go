@@ -28,9 +28,16 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("create logger: %w", err)
 	}
 
+	serviceInfo := httpserver.ServiceInfo{
+		Service:   cfg.ServiceName,
+		Version:   info.Version,
+		Commit:    info.Commit,
+		BuildTime: info.BuildDate,
+	}
+
 	// The core profile has no required external dependencies, so readiness is
 	// currently nil. Database or broker profiles can compose their checks here.
-	server := httpserver.New(cfg.HTTP, logger, nil)
+	server := httpserver.New(cfg.HTTP, logger, serviceInfo, nil)
 	errCh := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

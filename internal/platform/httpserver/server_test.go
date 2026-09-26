@@ -18,7 +18,12 @@ import (
 func TestHealthEndpoints(t *testing.T) {
 	t.Parallel()
 
-	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	server := New(
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
 
 	for _, path := range []string{"/health/live", "/health/ready"} {
 		t.Run(path, func(t *testing.T) {
@@ -43,7 +48,12 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 		return errors.New(internalDetail)
 	}
 
-	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), ready)
+	server := New(
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		ready,
+	)
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
@@ -74,10 +84,42 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 	}
 }
 
+func TestVersionEndpoint(t *testing.T) {
+	t.Parallel()
+
+	server := New(
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /version status = %d, want %d; body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+
+	var body ServiceInfo
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode version response: %v; body=%s", err, res.Body.String())
+	}
+	want := testServiceInfo()
+	if body != want {
+		t.Fatalf("version response = %#v, want %#v", body, want)
+	}
+}
+
 func TestOpenAPIEndpoint(t *testing.T) {
 	t.Parallel()
 
-	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	server := New(
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
@@ -97,5 +139,14 @@ func testConfig() config.HTTPConfig {
 		ShutdownTimeout:   time.Second,
 		MaxHeaderBytes:    1 << 20,
 		MaxBodyBytes:      1 << 20,
+	}
+}
+
+func testServiceInfo() ServiceInfo {
+	return ServiceInfo{
+		Service:   "test-service",
+		Version:   "1.2.3",
+		Commit:    "abc123",
+		BuildTime: "2026-09-27T00:00:00Z",
 	}
 }

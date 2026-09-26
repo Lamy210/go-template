@@ -22,7 +22,12 @@ type Server struct {
 }
 
 // New builds the HTTP server with bounded request sizes and timeout defaults.
-func New(cfg config.HTTPConfig, logger *slog.Logger, ready ReadinessCheck) *Server {
+func New(
+	cfg config.HTTPConfig,
+	logger *slog.Logger,
+	info ServiceInfo,
+	ready ReadinessCheck,
+) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	// Keep the access logger outside Recoverer so recovered panics are recorded
@@ -33,6 +38,7 @@ func New(cfg config.HTTPConfig, logger *slog.Logger, ready ReadinessCheck) *Serv
 
 	api := humachi.New(router, newAPIConfig())
 	registerHealth(api, ready)
+	registerVersion(api, info)
 
 	return &Server{
 		handler: router,
