@@ -1,10 +1,13 @@
 package httpserver
 
 import (
+	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +17,7 @@ import (
 func TestHealthEndpoints(t *testing.T) {
 	t.Parallel()
 
-	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 
 	for _, path := range []string{"/health/live", "/health/ready"} {
 		t.Run(path, func(t *testing.T) {
@@ -31,10 +34,31 @@ func TestHealthEndpoints(t *testing.T) {
 	}
 }
 
+func TestReadinessFailureDoesNotExposeInternalError(t *testing.T) {
+	t.Parallel()
+
+	const internalDetail = "database connection failed: password=secret"
+	ready := func(context.Context) error {
+		return errors.New(internalDetail)
+	}
+
+	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), ready)
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /health/ready status = %d, want %d; body=%s", res.Code, http.StatusServiceUnavailable, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), internalDetail) {
+		t.Fatalf("readiness response exposed internal error: %s", res.Body.String())
+	}
+}
+
 func TestOpenAPIEndpoint(t *testing.T) {
 	t.Parallel()
 
-	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server := New(testConfig(), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
 	res := httptest.NewRecorder()
 	server.Handler().ServeHTTP(res, req)
