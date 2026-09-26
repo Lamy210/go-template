@@ -15,6 +15,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+type decodedErrorResponse struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id"`
+}
+
 func TestHumaValidationErrorUsesCommonContract(t *testing.T) {
 	t.Parallel()
 
@@ -101,18 +107,10 @@ func TestHumaUnknownHandlerErrorIsSanitized(t *testing.T) {
 	}
 }
 
-func decodeErrorResponse(t *testing.T, res *httptest.ResponseRecorder) struct {
-	Code      string
-	Message   string
-	RequestID string
-} {
+func decodeErrorResponse(t *testing.T, res *httptest.ResponseRecorder) decodedErrorResponse {
 	t.Helper()
 
-	var body struct {
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequestID string `json:"request_id"`
-	}
+	var body decodedErrorResponse
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode error response: %v; body=%s", err, res.Body.String())
 	}
