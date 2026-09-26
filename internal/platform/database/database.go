@@ -3,7 +3,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,11 +21,13 @@ type Config struct {
 
 // Open creates and verifies a PostgreSQL pool.
 //
-// The database URL is never included in returned error messages.
+// Raw driver errors remain available through errors.Is/errors.As traversal but
+// are not included in Error(), which prevents connection details from leaking
+// through ordinary structured logging.
 func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("parse postgres configuration: %w", err)
+		return nil, newOperationError("parse postgres configuration", err)
 	}
 
 	poolConfig.MaxConns = cfg.MaxConns
@@ -41,11 +42,11 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 
 	pool, err := pgxpool.NewWithConfig(connectCtx, poolConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create postgres pool: %w", err)
+		return nil, newOperationError("create postgres pool", err)
 	}
 	if err := pool.Ping(connectCtx); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("ping postgres: %w", err)
+		return nil, newOperationError("ping postgres", err)
 	}
 	return pool, nil
 }
@@ -57,7 +58,7 @@ func ReadinessCheck(pool *pgxpool.Pool, timeout time.Duration) func(context.Cont
 		defer cancel()
 
 		if err := pool.Ping(checkCtx); err != nil {
-			return fmt.Errorf("ping postgres: %w", err)
+			return newOperationError("ping postgres", err)
 		}
 		return nil
 	}

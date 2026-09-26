@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +14,7 @@ import (
 // implicitly.
 func InTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
 	if err := pgx.BeginFunc(ctx, pool, fn); err != nil {
-		return fmt.Errorf("postgres transaction: %w", err)
+		return newOperationError("postgres transaction", err)
 	}
 	return nil
 }
