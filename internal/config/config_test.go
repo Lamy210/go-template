@@ -26,6 +26,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTP.ReadHeaderTimeout != defaultReadHeaderTimeout {
 		t.Fatalf("HTTP.ReadHeaderTimeout = %s, want %s", cfg.HTTP.ReadHeaderTimeout, defaultReadHeaderTimeout)
 	}
+	if cfg.Database.Enabled {
+		t.Fatal("Database.Enabled = true, want false")
+	}
 }
 
 func TestLoadOverrides(t *testing.T) {
@@ -40,6 +43,10 @@ func TestLoadOverrides(t *testing.T) {
 		"HTTP_MAX_HEADER_BYTES":    "2048",
 		"HTTP_MAX_BODY_BYTES":      "4096",
 		"HTTP_READ_HEADER_TIMEOUT": "2s",
+		"DATABASE_ENABLED":         "true",
+		"DATABASE_URL":             "postgres://example.invalid/app",
+		"DATABASE_MAX_CONNS":       "20",
+		"DATABASE_MIN_CONNS":       "2",
 	}
 
 	cfg, err := load(func(key string) (string, bool) {
@@ -65,6 +72,12 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.HTTP.MaxBodyBytes != 4096 {
 		t.Fatalf("MaxBodyBytes = %d, want 4096", cfg.HTTP.MaxBodyBytes)
 	}
+	if !cfg.Database.Enabled {
+		t.Fatal("Database.Enabled = false, want true")
+	}
+	if cfg.Database.MaxConns != 20 || cfg.Database.MinConns != 2 {
+		t.Fatalf("database pool = min:%d max:%d, want min:2 max:20", cfg.Database.MinConns, cfg.Database.MaxConns)
+	}
 }
 
 func TestLoadRejectsInvalidDuration(t *testing.T) {
@@ -78,6 +91,20 @@ func TestLoadRejectsInvalidDuration(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "HTTP_READ_TIMEOUT") {
 		t.Fatalf("load error = %v, want HTTP_READ_TIMEOUT parse error", err)
+	}
+}
+
+func TestLoadRejectsEnabledDatabaseWithoutURL(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		if key == "DATABASE_ENABLED" {
+			return "true", true
+		}
+		return "", false
+	})
+	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Fatalf("load error = %v, want DATABASE_URL validation error", err)
 	}
 }
 
