@@ -159,6 +159,24 @@ func TestLoadRejectsUnboundedNATSReconnects(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNATSAckBudgetWithoutSettlementSlack(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"NATS_ENABLED":         "true",
+			"NATS_ACK_WAIT":        "5s",
+			"NATS_HANDLER_TIMEOUT": "4s",
+			"NATS_ACK_TIMEOUT":     "1s",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil || !strings.Contains(err.Error(), "NATS_ACK_WAIT") {
+		t.Fatalf("load error = %v, want NATS_ACK_WAIT budget validation error", err)
+	}
+}
+
 func TestLoadRejectsEnabledDatabaseWithoutURL(t *testing.T) {
 	t.Parallel()
 
