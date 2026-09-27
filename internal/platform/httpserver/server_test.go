@@ -17,6 +17,94 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+func TestSanitizeRequestIDBoundary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		requestID string
+		wantKeep  bool
+	}{
+		{
+			name:      "valid upstream id",
+			requestID: "upstream-123_ABC/xyz",
+			wantKeep:  true,
+		},
+		{
+			name:      "maximum length",
+			requestID: strings.Repeat("a", maxClientRequestIDBytes),
+			wantKeep:  true,
+		},
+		{
+			name:      "too long",
+			requestID: strings.Repeat("a", maxClientRequestIDBytes+1),
+			wantKeep:  false,
+		},
+		{
+			name:      "contains whitespace",
+			requestID: "request id with spaces",
+			wantKeep:  false,
+		},
+		{
+			name:      "unicode",
+			requestID: "雪",
+			wantKeep:  false,
+		},
+		{
+			name:     "missing",
+			wantKeep: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotContextID string
+			var gotHeader string
+			handler := sanitizeRequestID(
+				middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					gotContextID = middleware.GetReqID(r.Context())
+					gotHeader = r.Header.Get(middleware.RequestIDHeader)
+					w.WriteHeader(http.StatusNoContent)
+				})),
+			)
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.requestID != "" {
+				req.Header.Set(middleware.RequestIDHeader, tt.requestID)
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+
+			if res.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+			}
+			if gotContextID == "" {
+				t.Fatal("request ID context is empty")
+			}
+
+			if tt.wantKeep {
+				if gotContextID != tt.requestID {
+					t.Fatalf("context request ID = %q, want %q", gotContextID, tt.requestID)
+				}
+				if gotHeader != tt.requestID {
+					t.Fatalf("request header = %q, want %q", gotHeader, tt.requestID)
+				}
+				return
+			}
+
+			if tt.requestID != "" && gotContextID == tt.requestID {
+				t.Fatalf("invalid client request ID was trusted: %q", gotContextID)
+			}
+			if gotHeader != "" {
+				t.Fatalf("invalid request ID header was not removed: %q", gotHeader)
+			}
+		})
+	}
+}
+
 func TestHealthEndpoints(t *testing.T) {
 	t.Parallel()
 
