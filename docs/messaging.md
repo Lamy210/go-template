@@ -77,7 +77,8 @@ infrastructure logs.
 The consumer uses JetStream `ConsumeContext.Drain` on normal cancellation so
 buffered deliveries can finish. Handler and acknowledgement work remains
 bounded by explicit timeouts. The NATS connection then has its own bounded
-drain lifecycle.
+drain lifecycle. A broker-side drain timeout is surfaced as a safe operation
+error instead of being silently treated as a successful close.
 
 This avoids leaving a live consume goroutine after process shutdown.
 
