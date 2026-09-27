@@ -35,7 +35,7 @@ fix(config): reject invalid timeout values
 - Pass `context.Context` through I/O paths; do not use it as a dependency container.
 - Avoid hidden globals for database handles, loggers, configuration, or error-model mutation.
 - Bound concurrency, retries, request sizes, and timeouts.
-- Never log secrets, passwords, access tokens, authorization headers, or raw dependency errors that may contain them.
+- Never log secrets, passwords, access tokens, authorization headers, raw URL paths by default, or raw dependency errors that may contain sensitive values.
 - Use `errors.Is` / `errors.AsType` for wrapped-error inspection rather than branching on error strings.
 
 See [core.md](core.md) for core, common-definition, helper, and error ownership rules.
