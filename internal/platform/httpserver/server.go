@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -90,8 +91,7 @@ func New(
 	}
 
 	router := chi.NewRouter()
-	router.Use(sanitizeRequestID)
-	router.Use(middleware.RequestID)
+	router.Use(requestID)
 	// Keep the access logger outside panic recovery so recovered panics are
 	// recorded as completed 500 responses rather than skipping the post-handler log.
 	router.Use(accessLog(logger, options.contextLogAttrs, options.routeObserver))
@@ -121,13 +121,18 @@ func New(
 	}, nil
 }
 
-func sanitizeRequestID(next http.Handler) http.Handler {
+func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get(middleware.RequestIDHeader)
-		if requestID != "" && !validClientRequestID(requestID) {
-			r.Header.Del(middleware.RequestIDHeader)
+		value := r.Header.Get(middleware.RequestIDHeader)
+		if !validClientRequestID(value) {
+			if value != "" {
+				r.Header.Del(middleware.RequestIDHeader)
+			}
+			value = rand.Text()
 		}
-		next.ServeHTTP(w, r)
+
+		ctx := context.WithValue(r.Context(), middleware.RequestIDKey, value)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
