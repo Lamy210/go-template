@@ -162,7 +162,9 @@ func Run(ctx context.Context) error {
 
 		readinessChecks = append(
 			readinessChecks,
-			httpserver.ReadinessCheck(natsClient.ReadinessCheck(cfg.NATS.RequestTimeout)),
+			httpserver.ReadinessCheck(
+				natsClient.ReadinessCheck(cfg.NATS.Stream, cfg.NATS.RequestTimeout),
+			),
 		)
 		logger.Info("nats jetstream ready",
 			"stream", cfg.NATS.Stream,
