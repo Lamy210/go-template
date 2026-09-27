@@ -60,7 +60,7 @@ func TestSafeRecovererReturnsSanitizedInternalError(t *testing.T) {
 	if !strings.Contains(logs.String(), "http handler panic") {
 		t.Fatalf("panic marker missing from logs: %s", logs.String())
 	}
-	if !strings.Contains(logs.String(), ""status":500") {
+	if !strings.Contains(logs.String(), "\"status\":500") {
 		t.Fatalf("access log did not record recovered 500: %s", logs.String())
 	}
 }
