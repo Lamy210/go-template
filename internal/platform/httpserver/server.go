@@ -13,7 +13,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-const apiVersion = "0.1.0"
+const (
+	apiVersion       = "0.1.0"
+	unmatchedRoute   = "<unmatched>"
+)
 
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
 type ContextLogAttrs func(context.Context) []slog.Attr
@@ -146,9 +149,14 @@ func accessLog(
 				routeObserver(r.Context(), r.Method, routePattern)
 			}
 
+			logRoute := routePattern
+			if logRoute == "" {
+				logRoute = unmatchedRoute
+			}
+
 			attrs := []slog.Attr{
 				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
+				slog.String("route", logRoute),
 				slog.Int("status", wrapped.Status()),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Int64("duration_ms", time.Since(started).Milliseconds()),
