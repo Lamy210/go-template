@@ -131,6 +131,7 @@ func requestID(next http.Handler) http.Handler {
 			value = rand.Text()
 		}
 
+		w.Header().Set(middleware.RequestIDHeader, value)
 		ctx := context.WithValue(r.Context(), middleware.RequestIDKey, value)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
