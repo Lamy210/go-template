@@ -147,7 +147,7 @@ func Run(ctx context.Context) error {
 		}
 		defer natsClient.Close()
 
-		if err := natsClient.EnsureStream(ctx, messaging.StreamConfig{
+		streamConfig := messaging.StreamConfig{
 			Name:            cfg.NATS.Stream,
 			Subjects:        cfg.NATS.Subjects,
 			MaxConsumers:    cfg.NATS.MaxConsumers,
@@ -156,14 +156,15 @@ func Run(ctx context.Context) error {
 			MaxAge:          cfg.NATS.MaxAge,
 			MaxMessageSize:  cfg.NATS.MaxMessageSize,
 			DuplicateWindow: cfg.NATS.DuplicateWindow,
-		}); err != nil {
+		}
+		if err := natsClient.EnsureStream(ctx, streamConfig); err != nil {
 			return fmt.Errorf("initialize jetstream stream: %w", err)
 		}
 
 		readinessChecks = append(
 			readinessChecks,
 			httpserver.ReadinessCheck(
-				natsClient.ReadinessCheck(cfg.NATS.Stream, cfg.NATS.RequestTimeout),
+				natsClient.ReadinessCheck(streamConfig, cfg.NATS.RequestTimeout),
 			),
 		)
 		logger.Info("nats jetstream ready",

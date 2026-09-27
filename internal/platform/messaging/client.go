@@ -187,17 +187,35 @@ type PublishAck struct {
 }
 
 // ReadinessCheck verifies the core connection and that the required JetStream
-// stream is still available.
-func (c *Client) ReadinessCheck(stream string, timeout time.Duration) func(context.Context) error {
+// stream still exists with the configuration fields managed by this template.
+func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration) func(context.Context) error {
 	return func(ctx context.Context) error {
+		if err := streamConfig.Validate(); err != nil {
+			return err
+		}
 		if c.conn.Status() != nats.CONNECTED {
 			return newOperationError("nats connection is not ready", errors.New("connection not connected"))
 		}
 
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		if _, err := c.js.Stream(checkCtx, stream); err != nil {
+
+		stream, err := c.js.Stream(checkCtx, streamConfig.Name)
+		if err != nil {
 			return newOperationError("query required jetstream stream", err)
+		}
+		info := stream.CachedInfo()
+		if info == nil {
+			return newOperationError(
+				"read required jetstream stream configuration",
+				errors.New("stream information unavailable"),
+			)
+		}
+		if !managedStreamConfigMatches(info.Config, streamConfig) {
+			return newOperationError(
+				"required jetstream stream configuration drift",
+				errors.New("managed stream configuration differs"),
+			)
 		}
 		return nil
 	}

@@ -421,8 +421,23 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
-	if err := client.ReadinessCheck(stream.Name, time.Second)(ctx); err != nil {
+	if err := client.ReadinessCheck(stream, time.Second)(ctx); err != nil {
 		t.Fatalf("nats readiness: %v", err)
+	}
+
+	driftedStream := stream
+	driftedStream.MaxBytes = stream.MaxBytes / 2
+	if err := client.EnsureStream(ctx, driftedStream); err != nil {
+		t.Fatalf("drift stream configuration: %v", err)
+	}
+	if err := client.ReadinessCheck(stream, time.Second)(ctx); err == nil {
+		t.Fatal("nats readiness succeeded after managed stream configuration drift")
+	}
+	if err := client.EnsureStream(ctx, stream); err != nil {
+		t.Fatalf("restore stream configuration: %v", err)
+	}
+	if err := client.ReadinessCheck(stream, time.Second)(ctx); err != nil {
+		t.Fatalf("nats readiness after stream restore: %v", err)
 	}
 
 	adminConn, err := nats.Connect(natsURL, nats.Timeout(2*time.Second))
@@ -437,7 +452,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	if err := adminJS.DeleteStream(ctx, stream.Name); err != nil {
 		t.Fatalf("delete required stream: %v", err)
 	}
-	if err := client.ReadinessCheck(stream.Name, time.Second)(ctx); err == nil {
+	if err := client.ReadinessCheck(stream, time.Second)(ctx); err == nil {
 		t.Fatal("nats readiness succeeded after required stream deletion")
 	}
 }

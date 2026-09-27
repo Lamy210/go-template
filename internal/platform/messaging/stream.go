@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -47,9 +48,17 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	_, err := c.js.CreateOrUpdateStream(requestCtx, jetstream.StreamConfig{
+	_, err := c.js.CreateOrUpdateStream(requestCtx, managedStreamConfig(cfg))
+	if err != nil {
+		return newOperationError("create or update jetstream stream", err)
+	}
+	return nil
+}
+
+func managedStreamConfig(cfg StreamConfig) jetstream.StreamConfig {
+	return jetstream.StreamConfig{
 		Name:         cfg.Name,
-		Subjects:     cfg.Subjects,
+		Subjects:     append([]string(nil), cfg.Subjects...),
 		Retention:    jetstream.LimitsPolicy,
 		MaxConsumers: cfg.MaxConsumers,
 		MaxMsgs:      cfg.MaxMessages,
@@ -60,9 +69,29 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 		Storage:      jetstream.FileStorage,
 		Replicas:     1,
 		Duplicates:   cfg.DuplicateWindow,
-	})
-	if err != nil {
-		return newOperationError("create or update jetstream stream", err)
 	}
-	return nil
+}
+
+func managedStreamConfigMatches(actual jetstream.StreamConfig, desired StreamConfig) bool {
+	expected := managedStreamConfig(desired)
+
+	actualSubjects := append([]string(nil), actual.Subjects...)
+	expectedSubjects := append([]string(nil), expected.Subjects...)
+	slices.Sort(actualSubjects)
+	slices.Sort(expectedSubjects)
+
+	return actual.Name == expected.Name &&
+		slices.Equal(actualSubjects, expectedSubjects) &&
+		actual.Retention == expected.Retention &&
+		actual.MaxConsumers == expected.MaxConsumers &&
+		actual.MaxMsgs == expected.MaxMsgs &&
+		actual.MaxBytes == expected.MaxBytes &&
+		actual.Discard == expected.Discard &&
+		actual.MaxAge == expected.MaxAge &&
+		actual.MaxMsgSize == expected.MaxMsgSize &&
+		actual.Storage == expected.Storage &&
+		actual.Replicas == expected.Replicas &&
+		actual.Duplicates == expected.Duplicates &&
+		!actual.NoAck &&
+		!actual.Sealed
 }

@@ -3,6 +3,8 @@ package messaging
 import (
 	"testing"
 	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 func TestClientConfigRejectsUnlimitedReconnects(t *testing.T) {
@@ -99,5 +101,75 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want overflow error")
+	}
+}
+
+func TestManagedStreamConfigMatchesManagedFields(t *testing.T) {
+	t.Parallel()
+
+	desired := StreamConfig{
+		Name:            "TEST",
+		Subjects:        []string{"test.a", "test.b"},
+		MaxConsumers:    2,
+		MaxMessages:     100,
+		MaxBytes:        4096,
+		MaxAge:          time.Hour,
+		MaxMessageSize:  1024,
+		DuplicateWindow: time.Minute,
+	}
+	actual := managedStreamConfig(desired)
+	actual.Subjects = []string{"test.b", "test.a"}
+
+	if !managedStreamConfigMatches(actual, desired) {
+		t.Fatal("managed stream config did not match equivalent subject ordering")
+	}
+
+	actual.MaxBytes++
+	if managedStreamConfigMatches(actual, desired) {
+		t.Fatal("managed stream config matched after max-bytes drift")
+	}
+}
+
+func TestManagedStreamConfigRejectsUnsafeServerFlags(t *testing.T) {
+	t.Parallel()
+
+	desired := StreamConfig{
+		Name:            "TEST",
+		Subjects:        []string{"test.>"},
+		MaxConsumers:    2,
+		MaxMessages:     100,
+		MaxBytes:        4096,
+		MaxAge:          time.Hour,
+		MaxMessageSize:  1024,
+		DuplicateWindow: time.Minute,
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*jetstream.StreamConfig)
+	}{
+		{
+			name: "no ack",
+			mutate: func(cfg *jetstream.StreamConfig) {
+				cfg.NoAck = true
+			},
+		},
+		{
+			name: "sealed",
+			mutate: func(cfg *jetstream.StreamConfig) {
+				cfg.Sealed = true
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			actual := managedStreamConfig(desired)
+			tt.mutate(&actual)
+			if managedStreamConfigMatches(actual, desired) {
+				t.Fatal("managed stream config matched unsafe server state")
+			}
+		})
 	}
 }
