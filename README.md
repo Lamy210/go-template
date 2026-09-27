@@ -94,7 +94,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT='http://127.0.0.1:4318'
 make dev
 ```
 
-The profile exports to `/v1/traces` and `/v1/metrics`, propagates W3C Trace Context/Baggage, and instruments inbound HTTP. Collector availability is intentionally not part of `/health/ready`; telemetry failures must not evict an otherwise healthy service.
+The profile exports to `/v1/traces` and `/v1/metrics`, propagates W3C Trace Context/Baggage, and instruments inbound HTTP. HTTP server spans are normalized with matched chi route templates rather than raw URL paths. Collector availability is intentionally not part of `/health/ready`; telemetry failures must not evict an otherwise healthy service.
 
 OpenTelemetry logging is not enabled in this profile. Structured application logs remain on `log/slog`; HTTP access logs include the active `trace_id` and `span_id` when telemetry is enabled.
 
