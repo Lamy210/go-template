@@ -15,6 +15,8 @@ import (
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -24,6 +26,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const instrumentationName = "github.com/Lamy210/go-template/internal/platform/telemetry"
 
 // Config contains bounded OTLP/HTTP exporter and SDK settings.
 type Config struct {
@@ -232,6 +236,64 @@ func (p *Provider) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) 
 // Extract restores cross-process context from a transport-neutral carrier.
 func (p *Provider) Extract(ctx context.Context, carrier coreprop.TextMapCarrier) context.Context {
 	return p.propagator.Extract(ctx, carrier)
+}
+
+// StartPublish starts one logical NATS publish span. The returned context is
+// the message creation context and should be injected into the outgoing message.
+func (p *Provider) StartPublish(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	return p.startMessagingOperation(
+		ctx,
+		"publish",
+		"send",
+		destination,
+		trace.SpanKindProducer,
+	)
+}
+
+// StartProcess starts one logical NATS handler-processing span.
+func (p *Provider) StartProcess(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	return p.startMessagingOperation(
+		ctx,
+		"process",
+		"process",
+		destination,
+		trace.SpanKindConsumer,
+	)
+}
+
+func (p *Provider) startMessagingOperation(
+	ctx context.Context,
+	operationName string,
+	operationType string,
+	destination string,
+	kind trace.SpanKind,
+) (context.Context, func(error)) {
+	tracer := p.tracerProvider.Tracer(instrumentationName)
+	spanCtx, span := tracer.Start(
+		ctx,
+		operationName+" "+destination,
+		trace.WithSpanKind(kind),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "nats"),
+			attribute.String("messaging.destination.name", destination),
+			attribute.String("messaging.operation.name", operationName),
+			attribute.String("messaging.operation.type", operationType),
+		),
+	)
+
+	return spanCtx, func(err error) {
+		if err != nil {
+			span.SetAttributes(attribute.String("error.type", fmt.Sprintf("%T", err)))
+			span.SetStatus(codes.Error, "messaging operation failed")
+		}
+		span.End()
+	}
 }
 
 // LogAttrs exposes correlation identifiers from the active span without coupling callers

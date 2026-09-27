@@ -195,13 +195,26 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	handlerCtx, cancel := context.WithTimeout(deliveryCtx, cfg.HandlerTimeout)
+	processCtx := deliveryCtx
+	endOperation := func(error) {}
+	if c.tracer != nil {
+		processCtx, endOperation = c.tracer.StartProcess(deliveryCtx, msg.Subject())
+		if processCtx == nil {
+			processCtx = deliveryCtx
+		}
+		if endOperation == nil {
+			endOperation = func(error) {}
+		}
+	}
+
+	handlerCtx, cancel := context.WithTimeout(processCtx, cfg.HandlerTimeout)
 	handlerErr := handler(handlerCtx, Message{
 		Subject:      msg.Subject(),
 		Data:         append([]byte(nil), msg.Data()...),
 		NumDelivered: metadata.NumDelivered,
 	})
 	cancel()
+	endOperation(handlerErr)
 
 	if handlerErr == nil {
 		if err := doubleAck(parent, msg, cfg.AckTimeout); err != nil {
@@ -228,21 +241,15 @@ func (c *Client) quarantine(
 	metadata *jetstream.MsgMetadata,
 	reportFatal func(error),
 ) {
-	quarantineCtx, cancel := context.WithTimeout(parent, c.requestTimeout)
-	defer cancel()
-
 	out := nats.NewMsg(cfg.QuarantineSubject)
 	out.Data = append([]byte(nil), msg.Data()...)
 	out.Header.Set("X-Original-Subject", msg.Subject())
 	out.Header.Set("X-Original-Stream", metadata.Stream)
 	out.Header.Set("X-Original-Sequence", strconv.FormatUint(metadata.Sequence.Stream, 10))
 	out.Header.Set("X-Delivery-Count", strconv.FormatUint(metadata.NumDelivered, 10))
-	if c.propagator != nil {
-		c.propagator.Inject(parent, natsHeaderCarrier{header: out.Header})
-	}
 
 	msgID := fmt.Sprintf("quarantine:%s:%d", metadata.Stream, metadata.Sequence.Stream)
-	if _, err := c.js.PublishMsg(quarantineCtx, out, jetstream.WithMsgID(msgID)); err != nil {
+	if _, err := c.publishMessage(parent, out, msgID); err != nil {
 		if metadata.NumDelivered < totalAttempts {
 			if nakErr := msg.NakWithDelay(cfg.RetryDelay); nakErr != nil {
 				reportFatal(newOperationError("schedule quarantine retry", nakErr))

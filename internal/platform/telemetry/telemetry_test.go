@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
 	otelprop "go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -115,6 +118,109 @@ func TestProviderInjectsAndExtractsW3CTraceContext(t *testing.T) {
 	}
 	if !got.IsRemote() {
 		t.Fatal("extracted span context is not remote")
+	}
+}
+
+func TestMessagingOperationSpans(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		start         func(*Provider) (context.Context, func(error))
+		wantSpanName  string
+		wantKind      trace.SpanKind
+		wantOperation string
+		wantType      string
+		finishErr     error
+		wantStatus    codes.Code
+		wantErrorType string
+	}{
+		{
+			name: "publish",
+			start: func(provider *Provider) (context.Context, func(error)) {
+				return provider.StartPublish(context.Background(), "orders.created")
+			},
+			wantSpanName:  "publish orders.created",
+			wantKind:      trace.SpanKindProducer,
+			wantOperation: "publish",
+			wantType:      "send",
+			wantStatus:    codes.Unset,
+		},
+		{
+			name: "process error",
+			start: func(provider *Provider) (context.Context, func(error)) {
+				return provider.StartProcess(context.Background(), "orders.created")
+			},
+			wantSpanName:  "process orders.created",
+			wantKind:      trace.SpanKindConsumer,
+			wantOperation: "process",
+			wantType:      "process",
+			finishErr:     errors.New("sensitive handler diagnostic"),
+			wantStatus:    codes.Error,
+			wantErrorType: "*errors.errorString",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := tracetest.NewSpanRecorder()
+			tracerProvider := sdktrace.NewTracerProvider(
+				sdktrace.WithSpanProcessor(recorder),
+			)
+			t.Cleanup(func() {
+				_ = tracerProvider.Shutdown(context.Background())
+			})
+			provider := &Provider{tracerProvider: tracerProvider}
+
+			spanCtx, end := tt.start(provider)
+			if !trace.SpanContextFromContext(spanCtx).IsValid() {
+				t.Fatal("messaging span context is invalid")
+			}
+			end(tt.finishErr)
+
+			ended := recorder.Ended()
+			if len(ended) != 1 {
+				t.Fatalf("ended spans = %d, want 1", len(ended))
+			}
+			span := ended[0]
+			if span.Name() != tt.wantSpanName {
+				t.Fatalf("span name = %q, want %q", span.Name(), tt.wantSpanName)
+			}
+			if span.SpanKind() != tt.wantKind {
+				t.Fatalf("span kind = %v, want %v", span.SpanKind(), tt.wantKind)
+			}
+
+			attrs := map[string]string{}
+			for _, attr := range span.Attributes() {
+				attrs[string(attr.Key)] = attr.Value.AsString()
+			}
+			for key, want := range map[string]string{
+				"messaging.system":           "nats",
+				"messaging.destination.name": "orders.created",
+				"messaging.operation.name":   tt.wantOperation,
+				"messaging.operation.type":   tt.wantType,
+			} {
+				if got := attrs[key]; got != want {
+					t.Fatalf("%s = %q, want %q", key, got, want)
+				}
+			}
+			if span.Status().Code != tt.wantStatus {
+				t.Fatalf("status = %v, want %v", span.Status().Code, tt.wantStatus)
+			}
+			if tt.wantErrorType == "" {
+				if _, exists := attrs["error.type"]; exists {
+					t.Fatalf("unexpected error.type = %q", attrs["error.type"])
+				}
+			} else if got := attrs["error.type"]; got != tt.wantErrorType {
+				t.Fatalf("error.type = %q, want %q", got, tt.wantErrorType)
+			}
+			if len(span.Events()) != 0 {
+				t.Fatalf("span events = %#v, want none so raw error text is not recorded", span.Events())
+			}
+		})
 	}
 }
 

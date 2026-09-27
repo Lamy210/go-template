@@ -55,17 +55,21 @@ ground.
 JetStream's message-ID deduplication. Callers should use an operation/event ID,
 not generate a new ID on every retry.
 
-## Context propagation
+## Tracing and context propagation
 
-Messaging accepts an optional transport-neutral text-map propagator. When both
-NATS and telemetry profiles are enabled, the application composition root wires
-the OpenTelemetry provider into the NATS client.
+Messaging accepts optional transport-neutral propagation and operation-tracing
+interfaces. When both NATS and telemetry profiles are enabled, the application
+composition root wires the OpenTelemetry provider into both interfaces.
 
-Publish injects the current cross-process context into NATS headers. Consumer
-delivery extracts those headers before creating the bounded handler context, so
-feature code receives the restored parent context without importing NATS or
-OpenTelemetry. Quarantine republishing re-injects the extracted context rather
-than copying arbitrary source headers.
+Each synchronous publish creates a PRODUCER span before propagation headers are
+injected, so the publish span context becomes the message creation context. Each
+business handler attempt creates a CONSUMER process span after extracting the
+message context. Quarantine publishing also goes through the same publish path,
+so quarantine delivery receives a new creation context instead of silently
+reusing the original producer span.
+
+The messaging package itself does not import OpenTelemetry. Feature handlers
+only receive a standard `context.Context`.
 
 When telemetry is disabled, no propagator is installed and messaging behavior is
 otherwise unchanged.
@@ -118,6 +122,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - stream provisioning with explicit limits;
 - message-ID deduplication;
 - publish-to-handler context propagation through real NATS headers;
+- publish/process tracer lifecycle and operation-context propagation;
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
 - consumer drain on cancellation;

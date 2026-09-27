@@ -71,6 +71,12 @@ Business handlers do not live in `internal/platform/messaging`. A feature owns i
 
 Cross-process context propagation is expressed through the stdlib-only `internal/core/propagation` contract. Telemetry implements the propagator, messaging implements the NATS header carrier, and `internal/app` wires them together only when both profiles are enabled.
 
+Messaging also owns a small operation-tracing interface whose methods use only
+`context.Context`, destination strings, and an error completion callback.
+Telemetry satisfies that interface structurally, so NATS publishing/processing
+can create spans without introducing an OpenTelemetry dependency into the
+messaging adapter.
+
 See [messaging.md](messaging.md).
 
 ## Telemetry boundaries
@@ -97,7 +103,7 @@ The current increments provide:
 - Huma OpenAPI 3.1 generation on top of chi;
 - liveness/readiness probes;
 - optional PostgreSQL with pgx/sqlc/Atlas;
-- optional NATS JetStream with bounded retry/quarantine, readiness, and transport-neutral context propagation;
-- optional OpenTelemetry traces/metrics with OTLP/HTTP export, HTTP instrumentation, and W3C propagation across NATS when both profiles are enabled;
+- optional NATS JetStream with bounded retry/quarantine, readiness, transport-neutral context propagation, and optional operation tracing;
+- optional OpenTelemetry traces/metrics with OTLP/HTTP export, HTTP instrumentation, and W3C propagation plus publish/process spans across NATS when both profiles are enabled;
 - unit, transport, database/Testcontainers, messaging, and telemetry export tests;
 - Docker and CI quality gates.
