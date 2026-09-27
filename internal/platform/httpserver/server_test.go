@@ -137,6 +137,9 @@ func TestOpenAPIEndpoint(t *testing.T) {
 func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	t.Parallel()
 
+	type correlationKey struct{}
+	const correlationValue = "0123456789abcdef0123456789abcdef"
+
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	server := New(
@@ -144,11 +147,18 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 		logger,
 		testServiceInfo(),
 		nil,
-		func(context.Context) []slog.Attr {
-			return []slog.Attr{
-				slog.String("trace_id", "0123456789abcdef0123456789abcdef"),
-				slog.String("span_id", "0123456789abcdef"),
+		func(ctx context.Context) []slog.Attr {
+			value, _ := ctx.Value(correlationKey{}).(string)
+			if value == "" {
+				return nil
 			}
+			return []slog.Attr{slog.String("trace_id", value)}
+		},
+		func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ctx := context.WithValue(r.Context(), correlationKey{}, correlationValue)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			})
 		},
 	)
 
@@ -164,11 +174,8 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
 		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
 	}
-	if entry["trace_id"] != "0123456789abcdef0123456789abcdef" {
+	if entry["trace_id"] != correlationValue {
 		t.Fatalf("trace_id = %v", entry["trace_id"])
-	}
-	if entry["span_id"] != "0123456789abcdef" {
-		t.Fatalf("span_id = %v", entry["span_id"])
 	}
 	if entry["request_id"] == "" {
 		t.Fatal("request_id is empty")
