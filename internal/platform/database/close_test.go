@@ -18,15 +18,17 @@ func (c *recordingCloser) Close() {
 }
 
 type blockingCloser struct {
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+	once     sync.Once
 }
 
 func newBlockingCloser() *blockingCloser {
 	return &blockingCloser{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
+		started:  make(chan struct{}),
+		release:  make(chan struct{}),
+		finished: make(chan struct{}),
 	}
 }
 
@@ -35,6 +37,7 @@ func (c *blockingCloser) Close() {
 		close(c.started)
 	})
 	<-c.release
+	close(c.finished)
 }
 
 func TestCloseWithContextCompletesNormally(t *testing.T) {
@@ -88,6 +91,12 @@ func TestCloseWithContextReturnsOnDeadline(t *testing.T) {
 	}
 
 	close(resource.release)
+
+	select {
+	case <-resource.finished:
+	case <-time.After(time.Second):
+		t.Fatal("underlying Close() did not continue after caller deadline")
+	}
 }
 
 func TestCloseRejectsInvalidInputs(t *testing.T) {
