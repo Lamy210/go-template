@@ -10,7 +10,7 @@ The repository is being bootstrapped incrementally. Core/HTTP provides typed con
 
 An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness, explicit transaction boundaries, local Compose, fresh-database integration tests, and self-contained Testcontainers execution. It is disabled by default so DB-free services stay simple.
 
-An optional NATS JetStream profile adds bounded connection/reconnect policy, explicit stream limits, message-ID deduplication, durable pull consumers, finite retry/quarantine behavior, dependency readiness, and graceful drain. It is also disabled by default.
+An optional NATS JetStream profile adds bounded connection/reconnect policy, explicit stream limits, message-ID deduplication, durable pull consumers, finite retry/quarantine behavior, dependency readiness with managed-stream drift detection, and graceful drain. It is also disabled by default.
 
 An optional OpenTelemetry profile exports stable traces and metrics over OTLP/HTTP with bounded buffering, retry, export, and shutdown behavior. It is disabled by default and is deliberately non-critical to readiness.
 
