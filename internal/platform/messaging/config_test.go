@@ -101,4 +101,3 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 		t.Fatal("Validate() error = nil, want overflow error")
 	}
 }
-
