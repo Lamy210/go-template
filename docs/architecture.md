@@ -83,6 +83,12 @@ See [messaging.md](messaging.md).
 
 The application composition root owns the OpenTelemetry provider lifecycle. The telemetry adapter owns OTLP/HTTP exporters, SDK bounds, resource attributes, W3C propagation, and the HTTP instrumentation middleware.
 
+The HTTP adapter exposes optional integration points through constructor options:
+context-derived access-log attributes, matched-route observation, and outer
+middleware. Route observation reports only chi route templates after routing;
+the telemetry adapter converts them into low-cardinality HTTP span names and
+`http.route` attributes without making the HTTP package import OpenTelemetry.
+
 Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
 
 Shutdown order is HTTP first, NATS second when enabled, and telemetry last so completed work can be flushed before process exit.

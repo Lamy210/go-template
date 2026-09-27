@@ -39,8 +39,7 @@ func Run(ctx context.Context) error {
 	}
 
 	var readinessChecks []httpserver.ReadinessCheck
-	var logContextAttrs httpserver.ContextLogAttrs
-	var outerMiddleware []func(http.Handler) http.Handler
+	var httpOptions []httpserver.Option
 
 	var telemetryProvider *telemetry.Provider
 	telemetryShutdown := false
@@ -84,10 +83,13 @@ func Run(ctx context.Context) error {
 			}
 		}()
 
-		logContextAttrs = telemetry.LogAttrs
-		outerMiddleware = append(
-			outerMiddleware,
-			telemetryProvider.HTTPMiddleware(cfg.ServiceName),
+		httpOptions = append(
+			httpOptions,
+			httpserver.WithContextLogAttrs(telemetry.LogAttrs),
+			httpserver.WithRouteObserver(telemetryProvider.ObserveHTTPRoute),
+			httpserver.WithOuterMiddleware(
+				telemetryProvider.HTTPMiddleware(cfg.ServiceName),
+			),
 		)
 		logger.Info("opentelemetry traces and metrics enabled",
 			"trace_sample_ratio", cfg.Telemetry.TraceSampleRatio,
@@ -173,8 +175,7 @@ func Run(ctx context.Context) error {
 		logger,
 		serviceInfo,
 		combineReadiness(readinessChecks...),
-		logContextAttrs,
-		outerMiddleware...,
+		httpOptions...,
 	)
 	errCh := make(chan error, 1)
 	go func() {

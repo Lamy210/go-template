@@ -228,6 +228,40 @@ func (p *Provider) HTTPMiddleware(operation string) func(http.Handler) http.Hand
 	)
 }
 
+// ObserveHTTPRoute updates the active server span after chi has resolved a
+// low-cardinality route pattern. Raw URL paths are never used as a fallback.
+func (*Provider) ObserveHTTPRoute(ctx context.Context, method, route string) {
+	route = strings.TrimSpace(route)
+	if route == "" {
+		return
+	}
+
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+
+	span.SetName(httpSpanMethod(method) + " " + route)
+	span.SetAttributes(attribute.String("http.route", route))
+}
+
+func httpSpanMethod(method string) string {
+	switch method {
+	case http.MethodConnect,
+		http.MethodDelete,
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodPatch,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodTrace:
+		return method
+	default:
+		return "HTTP"
+	}
+}
+
 // Inject writes the active cross-process context into a transport-neutral carrier.
 func (p *Provider) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) {
 	p.propagator.Inject(ctx, carrier)
