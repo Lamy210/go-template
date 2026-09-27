@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -55,6 +56,9 @@ func (c ConsumerConfig) Validate() error {
 	}
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("consumer limits must be positive")
+	}
+	if c.ProcessAttempts > math.MaxInt-c.QuarantineAttempts {
+		return fmt.Errorf("consumer delivery attempts exceed integer range")
 	}
 	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 || c.PullExpiry < time.Second {
 		return fmt.Errorf("consumer timeouts must be positive and pull expiry must be at least one second")
