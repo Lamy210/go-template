@@ -19,6 +19,24 @@ const (
 	KindUnavailable       Kind = "unavailable"
 )
 
+// Valid reports whether k is one of the architecture-level semantic kinds
+// understood by this version of the core contract.
+func (k Kind) Valid() bool {
+	switch k {
+	case KindInternal,
+		KindInvalidArgument,
+		KindUnauthenticated,
+		KindPermissionDenied,
+		KindNotFound,
+		KindConflict,
+		KindResourceExhausted,
+		KindUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Code is a stable machine-readable error code.
 //
 // Prefer module-specific codes such as "user_not_found" over exposing
