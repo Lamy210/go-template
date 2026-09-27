@@ -142,4 +142,4 @@ docs/
 
 ## Development workflow
 
-See [docs/development.md](docs/development.md) for branch naming, commit conventions, coding rules, and local commands.
+See [docs/development.md](docs/development.md) for branch naming, commit conventions, coding rules, and local commands. Dependency update scope and manual pins are documented in [docs/dependencies.md](docs/dependencies.md).
