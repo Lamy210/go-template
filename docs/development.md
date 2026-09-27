@@ -59,6 +59,9 @@ make db-down
 make nats-up
 make test-messaging
 make nats-down
+
+# OpenTelemetry profile (requires an OTLP/HTTP collector/backend)
+TELEMETRY_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 make dev
 ```
 
 Copy `.env.example` values into your process environment as needed. A `.env` file is intentionally ignored by Git.
