@@ -97,6 +97,7 @@ func Run(ctx context.Context) error {
 		)
 	}
 
+	var databaseShutdown func(context.Context) error
 	if cfg.Database.Enabled {
 		pool, err := database.Open(ctx, database.Config{
 			URL:               cfg.Database.URL,
@@ -110,7 +111,25 @@ func Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("initialize database: %w", err)
 		}
-		defer pool.Close()
+		databaseShutdown = func(shutdownCtx context.Context) error {
+			return database.Close(shutdownCtx, pool)
+		}
+		defer func() {
+			if databaseShutdown == nil {
+				return
+			}
+			shutdown := databaseShutdown
+			databaseShutdown = nil
+
+			shutdownCtx, cancel := context.WithTimeout(
+				context.Background(),
+				cfg.Database.ShutdownTimeout,
+			)
+			defer cancel()
+			if err := shutdown(shutdownCtx); err != nil {
+				logger.Warn("database shutdown failed")
+			}
+		}()
 
 		readinessChecks = append(
 			readinessChecks,
@@ -226,6 +245,20 @@ func Run(ctx context.Context) error {
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("drain nats: %w", err))
 		}
 		cancelNATS()
+	}
+
+	if databaseShutdown != nil {
+		shutdown := databaseShutdown
+		databaseShutdown = nil
+
+		databaseShutdownCtx, cancelDatabase := context.WithTimeout(
+			context.Background(),
+			cfg.Database.ShutdownTimeout,
+		)
+		if err := shutdown(databaseShutdownCtx); err != nil {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown database: %w", err))
+		}
+		cancelDatabase()
 	}
 
 	if telemetryProvider != nil {
