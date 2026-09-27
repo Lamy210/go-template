@@ -34,7 +34,7 @@ func TestTelemetryEnabledLoadsBoundedSettings(t *testing.T) {
 		"TELEMETRY_EXPORT_TIMEOUT":              "3s",
 		"TELEMETRY_RETRY_INITIAL_INTERVAL":      "250ms",
 		"TELEMETRY_RETRY_MAX_INTERVAL":          "1s",
-		"TELEMETRY_RETRY_MAX_ELAPSED_TIME":      "5s",
+		"TELEMETRY_RETRY_MAX_ELAPSED_TIME":      "2s",
 		"TELEMETRY_METRIC_INTERVAL":             "20s",
 		"TELEMETRY_TRACE_SAMPLE_RATIO":          "0.25",
 		"TELEMETRY_TRACE_MAX_QUEUE_SIZE":        "1024",
