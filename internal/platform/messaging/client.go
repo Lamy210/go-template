@@ -39,6 +39,13 @@ func (c ClientConfig) Validate() error {
 	return nil
 }
 
+// OperationTracer instruments logical messaging operations without coupling
+// this package to a specific telemetry implementation.
+type OperationTracer interface {
+	StartPublish(context.Context, string) (context.Context, func(error))
+	StartProcess(context.Context, string) (context.Context, func(error))
+}
+
 // Option configures optional messaging integrations without changing the
 // bounded connection policy in ClientConfig.
 type Option func(*Client)
@@ -50,12 +57,20 @@ func WithPropagator(propagator coreprop.TextMapPropagator) Option {
 	}
 }
 
+// WithTracer enables logical publish/process span instrumentation.
+func WithTracer(tracer OperationTracer) Option {
+	return func(client *Client) {
+		client.tracer = tracer
+	}
+}
+
 // Client owns a NATS connection and the modern JetStream API.
 type Client struct {
 	conn           *nats.Conn
 	js             jetstream.JetStream
 	requestTimeout time.Duration
 	propagator     coreprop.TextMapPropagator
+	tracer         OperationTracer
 }
 
 // Open connects to NATS without retrying the initial startup connection.
@@ -116,20 +131,10 @@ func (c *Client) Publish(
 	msgID string,
 	payload []byte,
 ) (PublishAck, error) {
-	publishCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-	defer cancel()
-
 	msg := nats.NewMsg(subject)
 	msg.Data = payload
-	if c.propagator != nil {
-		c.propagator.Inject(ctx, natsHeaderCarrier{header: msg.Header})
-	}
 
-	var options []jetstream.PublishOpt
-	if msgID != "" {
-		options = append(options, jetstream.WithMsgID(msgID))
-	}
-	ack, err := c.js.PublishMsg(publishCtx, msg, options...)
+	ack, err := c.publishMessage(ctx, msg, msgID)
 	if err != nil {
 		return PublishAck{}, newOperationError("publish jetstream message", err)
 	}
@@ -139,6 +144,39 @@ func (c *Client) Publish(
 		Sequence:  ack.Sequence,
 		Duplicate: ack.Duplicate,
 	}, nil
+}
+
+func (c *Client) publishMessage(
+	ctx context.Context,
+	msg *nats.Msg,
+	msgID string,
+) (*jetstream.PubAck, error) {
+	operationCtx := ctx
+	endOperation := func(error) {}
+	if c.tracer != nil {
+		operationCtx, endOperation = c.tracer.StartPublish(ctx, msg.Subject)
+		if operationCtx == nil {
+			operationCtx = ctx
+		}
+		if endOperation == nil {
+			endOperation = func(error) {}
+		}
+	}
+
+	if c.propagator != nil {
+		c.propagator.Inject(operationCtx, natsHeaderCarrier{header: msg.Header})
+	}
+
+	publishCtx, cancel := context.WithTimeout(operationCtx, c.requestTimeout)
+	defer cancel()
+
+	var options []jetstream.PublishOpt
+	if msgID != "" {
+		options = append(options, jetstream.WithMsgID(msgID))
+	}
+	ack, err := c.js.PublishMsg(publishCtx, msg, options...)
+	endOperation(err)
+	return ack, err
 }
 
 // PublishAck is the transport-neutral subset of a JetStream publish ack.
