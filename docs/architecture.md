@@ -94,6 +94,12 @@ middleware. Route observation reports only chi route templates after routing;
 the telemetry adapter converts them into low-cardinality HTTP span names and
 `http.route` attributes without making the HTTP package import OpenTelemetry.
 
+Access logging follows the same low-cardinality boundary: matched requests log
+the chi route template, while unmatched requests log a fixed `<unmatched>`
+marker. Raw `URL.Path` is deliberately excluded from default logs because path
+segments may contain identifiers, personal data, secrets, or attacker-controlled
+high-cardinality values.
+
 Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
 
 Shutdown order is HTTP first, NATS second when enabled, and telemetry last so completed work can be flushed before process exit.
