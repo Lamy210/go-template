@@ -107,6 +107,11 @@ NATS.
 Quarantine messages receive a freshly injected propagation header set from the
 extracted context instead of copying arbitrary original headers.
 
+Because Baggage is propagated through message headers, its contents can be
+persisted with JetStream messages and observed by infrastructure operators. Do
+not place credentials, access tokens, personal data, or unbounded/high-cardinality
+values in Baggage.
+
 ## Shutdown
 
 Normal shutdown is ordered:
