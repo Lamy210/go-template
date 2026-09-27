@@ -16,6 +16,7 @@ const (
 	defaultDatabaseHealthCheckPeriod = time.Minute
 	defaultDatabaseConnectTimeout    = 5 * time.Second
 	defaultDatabaseHealthTimeout     = 2 * time.Second
+	defaultDatabaseShutdownTimeout   = 10 * time.Second
 )
 
 // DatabaseConfig contains optional PostgreSQL profile configuration.
@@ -29,6 +30,7 @@ type DatabaseConfig struct {
 	HealthCheckPeriod time.Duration
 	ConnectTimeout    time.Duration
 	HealthTimeout     time.Duration
+	ShutdownTimeout   time.Duration
 }
 
 func loadDatabase(lookup lookupEnv) (DatabaseConfig, error) {
@@ -73,6 +75,14 @@ func loadDatabase(lookup lookupEnv) (DatabaseConfig, error) {
 	if err != nil {
 		return DatabaseConfig{}, err
 	}
+	shutdownTimeout, err := durationValue(
+		lookup,
+		"DATABASE_SHUTDOWN_TIMEOUT",
+		defaultDatabaseShutdownTimeout,
+	)
+	if err != nil {
+		return DatabaseConfig{}, err
+	}
 
 	cfg.URL = stringValue(lookup, "DATABASE_URL", "")
 	cfg.MaxConns = maxConns
@@ -82,6 +92,7 @@ func loadDatabase(lookup lookupEnv) (DatabaseConfig, error) {
 	cfg.HealthCheckPeriod = healthCheckPeriod
 	cfg.ConnectTimeout = connectTimeout
 	cfg.HealthTimeout = healthTimeout
+	cfg.ShutdownTimeout = shutdownTimeout
 
 	if err := cfg.Validate(); err != nil {
 		return DatabaseConfig{}, err
@@ -99,6 +110,7 @@ func defaultDatabaseConfig() DatabaseConfig {
 		HealthCheckPeriod: defaultDatabaseHealthCheckPeriod,
 		ConnectTimeout:    defaultDatabaseConnectTimeout,
 		HealthTimeout:     defaultDatabaseHealthTimeout,
+		ShutdownTimeout:   defaultDatabaseShutdownTimeout,
 	}
 }
 
@@ -133,6 +145,9 @@ func (c DatabaseConfig) Validate() error {
 	}
 	if c.HealthTimeout <= 0 {
 		return fmt.Errorf("DATABASE_HEALTH_TIMEOUT must be positive")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return fmt.Errorf("DATABASE_SHUTDOWN_TIMEOUT must be positive")
 	}
 	return nil
 }
