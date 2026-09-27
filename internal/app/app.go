@@ -14,6 +14,7 @@ import (
 	"github.com/Lamy210/go-template/internal/platform/database"
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 	"github.com/Lamy210/go-template/internal/platform/messaging"
+	"github.com/Lamy210/go-template/internal/platform/telemetry"
 )
 
 // Run loads configuration, initializes dependencies, starts the HTTP server,
@@ -38,6 +39,59 @@ func Run(ctx context.Context) error {
 	}
 
 	var readinessChecks []httpserver.ReadinessCheck
+	var outerMiddleware []func(http.Handler) http.Handler
+
+	var telemetryProvider *telemetry.Provider
+	telemetryShutdown := false
+	if cfg.Telemetry.Enabled {
+		telemetryProvider, err = telemetry.Open(
+			ctx,
+			telemetry.Config{
+				Endpoint:                cfg.Telemetry.Endpoint,
+				ExportTimeout:           cfg.Telemetry.ExportTimeout,
+				RetryInitialInterval:    cfg.Telemetry.RetryInitialInterval,
+				RetryMaxInterval:        cfg.Telemetry.RetryMaxInterval,
+				RetryMaxElapsedTime:     cfg.Telemetry.RetryMaxElapsedTime,
+				MetricInterval:          cfg.Telemetry.MetricInterval,
+				TraceSampleRatio:        cfg.Telemetry.TraceSampleRatio,
+				TraceMaxQueueSize:       cfg.Telemetry.TraceMaxQueueSize,
+				TraceMaxExportBatchSize: cfg.Telemetry.TraceMaxExportBatchSize,
+				TraceBatchTimeout:       cfg.Telemetry.TraceBatchTimeout,
+				MaxExportRequestBytes:   cfg.Telemetry.MaxExportRequestBytes,
+			},
+			telemetry.ResourceConfig{
+				ServiceName: cfg.ServiceName,
+				Version:     info.Version,
+				Environment: cfg.Environment,
+			},
+			logger,
+		)
+		if err != nil {
+			return fmt.Errorf("initialize telemetry: %w", err)
+		}
+		defer func() {
+			if telemetryShutdown {
+				return
+			}
+			shutdownCtx, cancel := context.WithTimeout(
+				context.Background(),
+				cfg.Telemetry.ShutdownTimeout,
+			)
+			defer cancel()
+			if err := telemetryProvider.Shutdown(shutdownCtx); err != nil {
+				logger.Warn("telemetry shutdown failed")
+			}
+		}()
+
+		outerMiddleware = append(
+			outerMiddleware,
+			telemetryProvider.HTTPMiddleware(cfg.ServiceName),
+		)
+		logger.Info("opentelemetry traces and metrics enabled",
+			"trace_sample_ratio", cfg.Telemetry.TraceSampleRatio,
+			"metric_interval", cfg.Telemetry.MetricInterval,
+		)
+	}
 
 	if cfg.Database.Enabled {
 		pool, err := database.Open(ctx, database.Config{
@@ -108,6 +162,7 @@ func Run(ctx context.Context) error {
 		logger,
 		serviceInfo,
 		combineReadiness(readinessChecks...),
+		outerMiddleware...,
 	)
 	errCh := make(chan error, 1)
 	go func() {
@@ -143,6 +198,18 @@ func Run(ctx context.Context) error {
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("drain nats: %w", err))
 		}
 		cancelNATS()
+	}
+
+	if telemetryProvider != nil {
+		telemetryShutdownCtx, cancelTelemetry := context.WithTimeout(
+			context.Background(),
+			cfg.Telemetry.ShutdownTimeout,
+		)
+		if err := telemetryProvider.Shutdown(telemetryShutdownCtx); err != nil {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown telemetry: %w", err))
+		}
+		telemetryShutdown = true
+		cancelTelemetry()
 	}
 
 	if shutdownErr != nil {

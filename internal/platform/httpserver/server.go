@@ -27,6 +27,7 @@ func New(
 	logger *slog.Logger,
 	info ServiceInfo,
 	ready ReadinessCheck,
+	outerMiddleware ...func(http.Handler) http.Handler,
 ) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -40,11 +41,16 @@ func New(
 	registerHealth(api, ready)
 	registerVersion(api, info)
 
+	var handler http.Handler = router
+	for i := len(outerMiddleware) - 1; i >= 0; i-- {
+		handler = outerMiddleware[i](handler)
+	}
+
 	return &Server{
-		handler: router,
+		handler: handler,
 		httpServer: &http.Server{
 			Addr:              cfg.Addr,
-			Handler:           router,
+			Handler:           handler,
 			ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 			ReadTimeout:       cfg.ReadTimeout,
 			WriteTimeout:      cfg.WriteTimeout,
