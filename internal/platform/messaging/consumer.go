@@ -70,6 +70,10 @@ func (c ConsumerConfig) Validate() error {
 	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 || c.PullExpiry < time.Second {
 		return fmt.Errorf("consumer timeouts must be positive and pull expiry must be at least one second")
 	}
+	if c.HandlerTimeout >= c.AckWait ||
+		c.AckTimeout >= c.AckWait-c.HandlerTimeout {
+		return fmt.Errorf("consumer ack wait must exceed handler timeout plus ack timeout")
+	}
 	return nil
 }
 
