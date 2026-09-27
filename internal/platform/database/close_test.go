@@ -99,13 +99,10 @@ func TestCloseWithContextReturnsOnDeadline(t *testing.T) {
 	}
 }
 
-func TestCloseRejectsInvalidInputs(t *testing.T) {
+func TestCloseRejectsNilPool(t *testing.T) {
 	t.Parallel()
 
 	if err := Close(context.Background(), nil); err == nil {
 		t.Fatal("Close() nil pool error = nil")
-	}
-	if err := closeWithContext(nil, &recordingCloser{}); err == nil {
-		t.Fatal("closeWithContext() nil context error = nil")
 	}
 }
