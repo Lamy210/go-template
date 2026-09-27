@@ -18,6 +18,45 @@ const apiVersion = "0.1.0"
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
 type ContextLogAttrs func(context.Context) []slog.Attr
 
+// RouteObserver receives the matched low-cardinality route pattern after the
+// handler returns. Unknown/unmatched routes are not reported.
+type RouteObserver func(context.Context, string, string)
+
+type serverOptions struct {
+	contextLogAttrs ContextLogAttrs
+	routeObserver   RouteObserver
+	outerMiddleware []func(http.Handler) http.Handler
+}
+
+// Option configures optional HTTP adapter integrations.
+type Option func(*serverOptions)
+
+// WithContextLogAttrs adds context-derived structured fields to access logs.
+func WithContextLogAttrs(attrs ContextLogAttrs) Option {
+	return func(options *serverOptions) {
+		options.contextLogAttrs = attrs
+	}
+}
+
+// WithRouteObserver observes resolved method/route pairs after request handling.
+func WithRouteObserver(observer RouteObserver) Option {
+	return func(options *serverOptions) {
+		options.routeObserver = observer
+	}
+}
+
+// WithOuterMiddleware wraps the router from left to right. It is intended for
+// cross-cutting middleware that must sit outside the chi router.
+func WithOuterMiddleware(middleware ...func(http.Handler) http.Handler) Option {
+	return func(options *serverOptions) {
+		for _, item := range middleware {
+			if item != nil {
+				options.outerMiddleware = append(options.outerMiddleware, item)
+			}
+		}
+	}
+}
+
 // Server owns the HTTP transport and lifecycle.
 type Server struct {
 	httpServer *http.Server
@@ -30,14 +69,20 @@ func New(
 	logger *slog.Logger,
 	info ServiceInfo,
 	ready ReadinessCheck,
-	logContextAttrs ContextLogAttrs,
-	outerMiddleware ...func(http.Handler) http.Handler,
+	opts ...Option,
 ) *Server {
+	var options serverOptions
+	for _, option := range opts {
+		if option != nil {
+			option(&options)
+		}
+	}
+
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	// Keep the access logger outside Recoverer so recovered panics are recorded
 	// as completed 500 responses rather than skipping the post-handler log.
-	router.Use(accessLog(logger, logContextAttrs))
+	router.Use(accessLog(logger, options.contextLogAttrs, options.routeObserver))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
@@ -46,8 +91,8 @@ func New(
 	registerVersion(api, info)
 
 	var handler http.Handler = router
-	for i := len(outerMiddleware) - 1; i >= 0; i-- {
-		handler = outerMiddleware[i](handler)
+	for i := len(options.outerMiddleware) - 1; i >= 0; i-- {
+		handler = options.outerMiddleware[i](handler)
 	}
 
 	return &Server{
@@ -85,12 +130,21 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func accessLog(logger *slog.Logger, contextAttrs ContextLogAttrs) func(http.Handler) http.Handler {
+func accessLog(
+	logger *slog.Logger,
+	contextAttrs ContextLogAttrs,
+	routeObserver RouteObserver,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(wrapped, r)
+
+			routePattern := chi.RouteContext(r.Context()).RoutePattern()
+			if routeObserver != nil && routePattern != "" {
+				routeObserver(r.Context(), r.Method, routePattern)
+			}
 
 			attrs := []slog.Attr{
 				slog.String("method", r.Method),
