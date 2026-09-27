@@ -76,6 +76,10 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	processAttempts, totalAttempts, err := deliveryAttemptLimits(cfg)
+	if err != nil {
+		return err
+	}
 	if err := c.EnsureStream(ctx, cfg.Stream); err != nil {
 		return err
 	}
@@ -111,7 +115,15 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	workCtx := context.WithoutCancel(ctx)
 	consumeCtx, err := consumer.Consume(
 		func(msg jetstream.Msg) {
-			c.handleDelivery(workCtx, cfg, msg, handler, reportFatal)
+			c.handleDelivery(
+				workCtx,
+				cfg,
+				processAttempts,
+				totalAttempts,
+				msg,
+				handler,
+				reportFatal,
+			)
 		},
 		jetstream.PullMaxMessages(cfg.MaxAckPending),
 		jetstream.PullExpiry(cfg.PullExpiry),
@@ -158,6 +170,8 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 func (c *Client) handleDelivery(
 	parent context.Context,
 	cfg ConsumerConfig,
+	processAttempts uint64,
+	totalAttempts uint64,
 	msg jetstream.Msg,
 	handler Handler,
 	reportFatal func(error),
@@ -168,8 +182,8 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	if metadata.NumDelivered > uint64(cfg.ProcessAttempts) {
-		c.quarantine(parent, cfg, msg, metadata, reportFatal)
+	if metadata.NumDelivered > processAttempts {
+		c.quarantine(parent, cfg, totalAttempts, msg, metadata, reportFatal)
 		return
 	}
 
@@ -188,19 +202,20 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	if metadata.NumDelivered < uint64(cfg.ProcessAttempts) {
+	if metadata.NumDelivered < processAttempts {
 		if err := msg.NakWithDelay(cfg.RetryDelay); err != nil {
 			reportFatal(newOperationError("schedule jetstream retry", err))
 		}
 		return
 	}
 
-	c.quarantine(parent, cfg, msg, metadata, reportFatal)
+	c.quarantine(parent, cfg, totalAttempts, msg, metadata, reportFatal)
 }
 
 func (c *Client) quarantine(
 	parent context.Context,
 	cfg ConsumerConfig,
+	totalAttempts uint64,
 	msg jetstream.Msg,
 	metadata *jetstream.MsgMetadata,
 	reportFatal func(error),
@@ -217,7 +232,6 @@ func (c *Client) quarantine(
 
 	msgID := fmt.Sprintf("quarantine:%s:%d", metadata.Stream, metadata.Sequence.Stream)
 	if _, err := c.js.PublishMsg(quarantineCtx, out, jetstream.WithMsgID(msgID)); err != nil {
-		totalAttempts := uint64(cfg.ProcessAttempts) + uint64(cfg.QuarantineAttempts)
 		if metadata.NumDelivered < totalAttempts {
 			if nakErr := msg.NakWithDelay(cfg.RetryDelay); nakErr != nil {
 				reportFatal(newOperationError("schedule quarantine retry", nakErr))
@@ -231,6 +245,16 @@ func (c *Client) quarantine(
 	if err := doubleAck(parent, msg, cfg.AckTimeout); err != nil {
 		reportFatal(err)
 	}
+}
+
+func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
+	if cfg.ProcessAttempts < 0 || cfg.QuarantineAttempts < 0 {
+		return 0, 0, fmt.Errorf("consumer delivery attempts must not be negative")
+	}
+
+	processAttempts := uint64(cfg.ProcessAttempts)
+	quarantineAttempts := uint64(cfg.QuarantineAttempts)
+	return processAttempts, processAttempts + quarantineAttempts, nil
 }
 
 func doubleAck(parent context.Context, msg jetstream.Msg, timeout time.Duration) error {
