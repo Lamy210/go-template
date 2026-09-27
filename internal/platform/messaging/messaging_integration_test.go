@@ -300,6 +300,62 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
+	t.Run("handler deadline nil return retries", func(t *testing.T) {
+		const subject = "template.events.deadline"
+		var attempts atomic.Int32
+		processed := make(chan struct{}, 1)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+
+		go func() {
+			cfg := workerConfig(stream, "deadline-worker", subject)
+			cfg.HandlerTimeout = 100 * time.Millisecond
+			cfg.AckTimeout = 100 * time.Millisecond
+			cfg.AckWait = time.Second
+			cfg.RetryDelay = 50 * time.Millisecond
+			errCh <- client.RunConsumer(
+				consumerCtx,
+				cfg,
+				func(handlerCtx context.Context, _ messaging.Message) error {
+					if attempts.Add(1) == 1 {
+						<-handlerCtx.Done()
+						return nil
+					}
+					processed <- struct{}{}
+					return nil
+				},
+			)
+		}()
+
+		if _, err := client.Publish(
+			ctx,
+			subject,
+			"deadline-1",
+			[]byte("deadline-retry"),
+		); err != nil {
+			t.Fatalf("publish deadline message: %v", err)
+		}
+
+		select {
+		case <-processed:
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for post-deadline retry success")
+		}
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("handler attempts = %d, want 2", got)
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("deadline consumer shutdown: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("deadline consumer did not drain")
+		}
+	})
+
 	t.Run("retry then ack", func(t *testing.T) {
 		var attempts atomic.Int32
 		processed := make(chan struct{}, 1)
