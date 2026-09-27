@@ -245,7 +245,7 @@ func TestHTTPMiddlewareRouteObserverUpdatesActiveSpan(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /widgets/{widgetID}", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/widgets/{widgetID}", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -268,10 +268,10 @@ func TestHTTPMiddlewareRouteObserverUpdatesActiveSpan(t *testing.T) {
 		t.Fatalf("ended spans = %d, want 1", len(ended))
 	}
 	span := ended[0]
-	if span.Name() != "GET GET /widgets/{widgetID}" {
-		t.Fatalf("span name = %q, want %q", span.Name(), "GET GET /widgets/{widgetID}")
+	if span.Name() != "GET /widgets/{widgetID}" {
+		t.Fatalf("span name = %q, want %q", span.Name(), "GET /widgets/{widgetID}")
 	}
-	if got, ok := spanStringAttribute(span, "http.route"); !ok || got != "GET /widgets/{widgetID}" {
+	if got, ok := spanStringAttribute(span, "http.route"); !ok || got != "/widgets/{widgetID}" {
 		t.Fatalf("http.route = %q, present=%t", got, ok)
 	}
 }
