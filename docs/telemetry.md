@@ -93,16 +93,25 @@ The telemetry profile supplies this callback to extract correlation identifiers
 from the active span; when telemetry is disabled, the callback is nil and no
 trace fields are emitted.
 
-## Messaging propagation
+## Messaging tracing and propagation
 
-The provider also implements the transport-neutral text-map propagation contract
-from `internal/core/propagation`. When the NATS profile is enabled at the same
-time, the application passes the provider to the messaging client.
+The provider implements both the transport-neutral text-map propagation contract
+from `internal/core/propagation` and the messaging operation-tracing interface.
+When the NATS profile is enabled at the same time, the application passes the
+provider to the messaging client.
 
-That lets JetStream publishers inject W3C Trace Context/Baggage into NATS
-headers and consumers restore it before invoking feature handlers. The messaging
-package does not import OpenTelemetry, and the telemetry package does not import
-NATS.
+JetStream publish operations create `publish {subject}` PRODUCER spans with
+`messaging.system=nats`, the destination subject, and messaging operation
+attributes. The resulting span context is then injected as W3C Trace
+Context/Baggage. Consumer handler attempts restore that context and create
+`process {subject}` CONSUMER spans.
+
+Messaging operation failures set an error status and a type-only `error.type`
+attribute. The adapter deliberately does not record the raw error message as a
+span event, avoiding accidental export of dependency or handler diagnostics.
+
+The messaging package does not import OpenTelemetry, and the telemetry package
+does not import NATS.
 
 Quarantine messages receive a freshly injected propagation header set from the
 extracted context instead of copying arbitrary original headers.
@@ -111,6 +120,11 @@ Because Baggage is propagated through message headers, its contents can be
 persisted with JetStream messages and observed by infrastructure operators. Do
 not place credentials, access tokens, personal data, or unbounded/high-cardinality
 values in Baggage.
+
+NATS subjects are also exported as messaging destination attributes and included
+in span names. Subject design should therefore avoid secrets and personal data,
+and should avoid unnecessary per-entity cardinality where observability cost
+matters.
 
 ## Shutdown
 
