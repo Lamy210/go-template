@@ -108,7 +108,7 @@ func load(lookup lookupEnv) (Config, error) {
 			MaxHeaderBytes:    maxHeaderBytes,
 			MaxBodyBytes:      maxBodyBytes,
 		},
-		Database: databaseConfig,
+		Database:  databaseConfig,
 		NATS:      natsConfig,
 		Telemetry: telemetryConfig,
 	}
