@@ -109,6 +109,11 @@ small enough for normal NATS header limits and operational inspection.
 Handler error text is not copied into quarantine headers or generic
 infrastructure logs.
 
+A handler must honor its context cancellation promptly. If it returns `nil`
+after its handler context has already expired, the messaging boundary treats the
+expired context as a processing failure instead of acknowledging the delivery as
+successful. That failure follows the same bounded retry/quarantine policy.
+
 A panic from a feature handler is contained at the messaging boundary and
 converted to a generic typed handler failure. The panic value itself is
 discarded rather than logged or copied into telemetry/quarantine metadata. The
@@ -144,6 +149,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
 - panic containment followed by bounded retry without crashing the consumer;
+- handler deadline expiry followed by retry even when the handler returns nil;
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
 - consumer drain on cancellation;
