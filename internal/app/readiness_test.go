@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 )
@@ -19,15 +21,15 @@ func TestCombineReadinessWithoutChecksReturnsNil(t *testing.T) {
 func TestCombineReadinessRunsAllChecks(t *testing.T) {
 	t.Parallel()
 
-	calls := 0
+	var calls atomic.Int32
 	check := combineReadiness(
 		func(context.Context) error {
-			calls++
+			calls.Add(1)
 			return nil
 		},
 		nil,
 		func(context.Context) error {
-			calls++
+			calls.Add(1)
 			return nil
 		},
 	)
@@ -38,23 +40,70 @@ func TestCombineReadinessRunsAllChecks(t *testing.T) {
 	if err := check(context.Background()); err != nil {
 		t.Fatalf("combined readiness error = %v", err)
 	}
-	if calls != 2 {
-		t.Fatalf("readiness calls = %d, want 2", calls)
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("readiness calls = %d, want 2", got)
 	}
 }
 
-func TestCombineReadinessStopsAtFirstFailure(t *testing.T) {
+func TestCombineReadinessRunsChecksConcurrently(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	check := combineReadiness(
+		func(context.Context) error {
+			started <- struct{}{}
+			<-release
+			return nil
+		},
+		func(context.Context) error {
+			started <- struct{}{}
+			<-release
+			return nil
+		},
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- check(context.Background())
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("readiness checks did not start concurrently")
+		}
+	}
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("combined readiness error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("combined readiness did not finish")
+	}
+}
+
+func TestCombineReadinessCancelsSiblingsAfterFailure(t *testing.T) {
 	t.Parallel()
 
 	sentinel := errors.New("dependency unavailable")
-	secondCalled := false
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+
 	check := combineReadiness(
-		httpserver.ReadinessCheck(func(context.Context) error {
-			return sentinel
+		httpserver.ReadinessCheck(func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			close(canceled)
+			return ctx.Err()
 		}),
 		httpserver.ReadinessCheck(func(context.Context) error {
-			secondCalled = true
-			return nil
+			<-started
+			return sentinel
 		}),
 	)
 
@@ -62,7 +111,10 @@ func TestCombineReadinessStopsAtFirstFailure(t *testing.T) {
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("combined readiness error = %v, want sentinel", err)
 	}
-	if secondCalled {
-		t.Fatal("readiness continued after first failure")
+
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("sibling readiness check was not canceled")
 	}
 }
