@@ -24,6 +24,11 @@ Platform packages own protocol and infrastructure translation. For example, appl
 
 Health and version endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be business modules.
 
+HTTP panic containment is also transport-owned. The adapter returns the same
+generic `internal_error` contract when a response has not started, logs only
+sanitized request metadata, and aborts already-started responses rather than
+appending a misleading error payload.
+
 ## Dependency direction
 
 ```text
@@ -103,6 +108,7 @@ The current increments provide:
 - structured `log/slog` logging;
 - transport-neutral application error semantics;
 - safe HTTP error translation with stable codes and request IDs;
+- sanitized HTTP panic recovery without raw panic values or stack traces;
 - build metadata and a version endpoint;
 - a bounded HTTP server with explicit timeouts and request/body limits;
 - graceful shutdown;
