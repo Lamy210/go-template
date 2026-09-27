@@ -152,11 +152,6 @@ jobs:
       - name: Run database integration tests
         run: go test -tags=integration ./test/integration/...
 
-      - name: Run Testcontainers smoke test
-        env:
-          DATABASE_URL: ""
-        run: go test -tags=integration -run '^TestGeneratedQueriesAgainstMigratedPostgres$' ./test/integration/...
-
       - name: Verify generated artifacts are committed
         run: |
           git add -N migrations/atlas.sum
