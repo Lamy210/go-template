@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestSignalEndpointAppendsSignalPath(t *testing.T) {
@@ -44,6 +46,37 @@ func TestOperationErrorRetainsCauseWithoutExposingIt(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), cause.Error()) {
 		t.Fatalf("Error() exposed raw exporter error: %q", err.Error())
+	}
+}
+
+func TestLogAttrsExtractsTraceCorrelation(t *testing.T) {
+	t.Parallel()
+
+	traceID := trace.TraceID{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}
+	spanID := trace.SpanID{0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe}
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), spanContext)
+
+	attrs := LogAttrs(ctx)
+	if len(attrs) != 2 {
+		t.Fatalf("LogAttrs() len = %d, want 2", len(attrs))
+	}
+	if attrs[0].Key != "trace_id" || attrs[0].Value.String() != traceID.String() {
+		t.Fatalf("trace attr = %#v", attrs[0])
+	}
+	if attrs[1].Key != "span_id" || attrs[1].Value.String() != spanID.String() {
+		t.Fatalf("span attr = %#v", attrs[1])
+	}
+}
+
+func TestLogAttrsWithoutSpanIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	if attrs := LogAttrs(context.Background()); len(attrs) != 0 {
+		t.Fatalf("LogAttrs() = %#v, want empty", attrs)
 	}
 }
 

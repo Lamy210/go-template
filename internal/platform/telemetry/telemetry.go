@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Config contains bounded OTLP/HTTP exporter and SDK settings.
@@ -218,6 +219,23 @@ func (p *Provider) HTTPMiddleware(operation string) func(http.Handler) http.Hand
 		otelhttp.WithMeterProvider(p.meterProvider),
 		otelhttp.WithPropagators(p.propagator),
 	)
+}
+
+// LogAttrs exposes correlation identifiers from the active span without coupling callers
+// to OpenTelemetry-specific types.
+func LogAttrs(ctx context.Context) []slog.Attr {
+	spanContext := trace.SpanContextFromContext(ctx)
+	if !spanContext.IsValid() {
+		return nil
+	}
+
+	attrs := []slog.Attr{
+		slog.String("trace_id", spanContext.TraceID().String()),
+	}
+	if spanContext.SpanID().IsValid() {
+		attrs = append(attrs, slog.String("span_id", spanContext.SpanID().String()))
+	}
+	return attrs
 }
 
 // ForceFlush exports pending traces and metrics within the caller's deadline.

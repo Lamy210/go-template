@@ -15,6 +15,9 @@ import (
 
 const apiVersion = "0.1.0"
 
+// ContextLogAttrs extracts optional structured access-log fields from a request context.
+type ContextLogAttrs func(context.Context) []slog.Attr
+
 // Server owns the HTTP transport and lifecycle.
 type Server struct {
 	httpServer *http.Server
@@ -27,13 +30,14 @@ func New(
 	logger *slog.Logger,
 	info ServiceInfo,
 	ready ReadinessCheck,
+	logContextAttrs ContextLogAttrs,
 	outerMiddleware ...func(http.Handler) http.Handler,
 ) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	// Keep the access logger outside Recoverer so recovered panics are recorded
 	// as completed 500 responses rather than skipping the post-handler log.
-	router.Use(accessLog(logger))
+	router.Use(accessLog(logger, logContextAttrs))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
@@ -81,21 +85,25 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func accessLog(logger *slog.Logger) func(http.Handler) http.Handler {
+func accessLog(logger *slog.Logger, contextAttrs ContextLogAttrs) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			started := time.Now()
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(wrapped, r)
 
-			logger.InfoContext(r.Context(), "http request",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", wrapped.Status(),
-				"bytes", wrapped.BytesWritten(),
-				"duration_ms", time.Since(started).Milliseconds(),
-				"request_id", middleware.GetReqID(r.Context()),
-			)
+			attrs := []slog.Attr{
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.Int("status", wrapped.Status()),
+				slog.Int("bytes", wrapped.BytesWritten()),
+				slog.Int64("duration_ms", time.Since(started).Milliseconds()),
+				slog.String("request_id", middleware.GetReqID(r.Context())),
+			}
+			if contextAttrs != nil {
+				attrs = append(attrs, contextAttrs(r.Context())...)
+			}
+			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request", attrs...)
 		})
 	}
 }

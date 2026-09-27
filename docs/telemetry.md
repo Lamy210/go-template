@@ -18,6 +18,10 @@ OpenTelemetry logs are deliberately not enabled. Application logging continues
 to use structured `log/slog`. This keeps the template on stable OTel signals
 while avoiding a second logging pipeline.
 
+When telemetry is enabled, HTTP access logs include the active `trace_id` and
+`span_id` so operators can correlate structured logs with exported traces
+without adopting the OpenTelemetry logging signal.
+
 ## Export topology
 
 Use an OpenTelemetry Collector or OTLP-compatible backend:
@@ -83,6 +87,11 @@ The application passes the telemetry middleware into the HTTP adapter as an
 outer middleware. The HTTP package does not import OpenTelemetry itself. This
 keeps dependency direction explicit and lets the telemetry profile remain
 runtime-optional.
+
+The HTTP adapter also accepts an optional context-to-log-attributes callback.
+The telemetry profile supplies this callback to extract correlation identifiers
+from the active span; when telemetry is disabled, the callback is nil and no
+trace fields are emitted.
 
 ## Shutdown
 

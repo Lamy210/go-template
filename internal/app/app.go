@@ -39,6 +39,7 @@ func Run(ctx context.Context) error {
 	}
 
 	var readinessChecks []httpserver.ReadinessCheck
+	var logContextAttrs httpserver.ContextLogAttrs
 	var outerMiddleware []func(http.Handler) http.Handler
 
 	var telemetryProvider *telemetry.Provider
@@ -83,6 +84,7 @@ func Run(ctx context.Context) error {
 			}
 		}()
 
+		logContextAttrs = telemetry.LogAttrs
 		outerMiddleware = append(
 			outerMiddleware,
 			telemetryProvider.HTTPMiddleware(cfg.ServiceName),
@@ -162,6 +164,7 @@ func Run(ctx context.Context) error {
 		logger,
 		serviceInfo,
 		combineReadiness(readinessChecks...),
+		logContextAttrs,
 		outerMiddleware...,
 	)
 	errCh := make(chan error, 1)
