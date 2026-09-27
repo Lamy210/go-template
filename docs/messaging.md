@@ -31,6 +31,24 @@ JetStream streams are created with finite message count, byte, age, consumer,
 and single-message-size limits. The template never relies on JetStream's
 unlimited `MaxMsgs` / `MaxBytes` defaults.
 
+## Runtime wiring
+
+When `NATS_ENABLED=true`, the application composition root:
+
+1. creates one bounded NATS connection;
+2. creates or reconciles the configured JetStream stream;
+3. includes NATS/JetStream in `/health/ready` alongside other enabled
+   required dependencies;
+4. drains HTTP first and then drains NATS during normal shutdown;
+5. keeps an immediate connection close as a fail-safe for startup failure or
+   abnormal exit.
+
+The application does not register a fake business consumer. Consumer handlers
+belong to a feature/application package and call `RunConsumer` with the
+durable/filter policy they own. This keeps the NATS profile reusable and
+prevents infrastructure code from becoming a business `worker` dumping
+ground.
+
 ## Idempotent publishing
 
 `messaging.Client.Publish` accepts a stable message ID and maps it to
@@ -83,4 +101,6 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - consumer drain on cancellation;
 - NATS/JetStream readiness.
 
-The profile remains independent of PostgreSQL.
+The profile remains independent of PostgreSQL. When both profiles are enabled,
+their readiness checks are composed at the application boundary rather than
+making either infrastructure package depend on the other.
