@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -128,7 +129,7 @@ func TestReadinessCheckRejectsInvalidInputs(t *testing.T) {
 func TestInTxRejectsInvalidInputs(t *testing.T) {
 	t.Parallel()
 
-	if err := InTx(context.Background(), nil, func(_ anyTx) error { return nil }); err == nil {
+	if err := InTx(context.Background(), nil, func(pgx.Tx) error { return nil }); err == nil {
 		t.Fatal("InTx() nil pool error = nil")
 	}
 
@@ -136,9 +137,6 @@ func TestInTxRejectsInvalidInputs(t *testing.T) {
 	if err := InTx(context.Background(), pool, nil); err == nil {
 		t.Fatal("InTx() nil callback error = nil")
 	}
-}
-
-type anyTx = interface {
 }
 
 func validDatabaseConfig() Config {
