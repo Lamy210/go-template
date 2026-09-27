@@ -19,9 +19,6 @@ type closer interface {
 // in its goroutine so a later Release can still finish resource destruction,
 // while the process lifecycle is no longer blocked indefinitely.
 func Close(ctx context.Context, pool *pgxpool.Pool) error {
-	if ctx == nil {
-		return errors.New("postgres close context must not be nil")
-	}
 	if pool == nil {
 		return errors.New("postgres pool must not be nil")
 	}
@@ -29,9 +26,6 @@ func Close(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func closeWithContext(ctx context.Context, resource closer) error {
-	if ctx == nil {
-		return errors.New("postgres close context must not be nil")
-	}
 	if resource == nil {
 		return errors.New("postgres closer must not be nil")
 	}
