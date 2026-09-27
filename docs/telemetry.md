@@ -88,6 +88,16 @@ outer middleware. The HTTP package does not import OpenTelemetry itself. This
 keeps dependency direction explicit and lets the telemetry profile remain
 runtime-optional.
 
+After chi finishes routing, the HTTP adapter exposes the resolved route pattern
+through a transport-neutral route observer. Telemetry uses that pattern to
+rename the active server span to `{METHOD} {route}` and set `http.route`
+before the outer OpenTelemetry middleware ends the span.
+
+Only matched chi route templates are observed. Unmatched requests do not fall
+back to `URL.Path`, preventing per-ID paths or other high-cardinality/raw URL
+values from becoming span names or `http.route` attributes. Unknown HTTP
+methods use `HTTP {route}` as the span name.
+
 The HTTP adapter also accepts an optional context-to-log-attributes callback.
 The telemetry profile supplies this callback to extract correlation identifiers
 from the active span; when telemetry is disabled, the callback is nil and no
