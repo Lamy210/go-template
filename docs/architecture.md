@@ -37,9 +37,11 @@ sanitized request metadata, and aborts already-started responses rather than
 appending a misleading error payload.
 
 Request correlation is also treated as an HTTP trust boundary. Client-supplied
-`X-Request-Id` values are accepted only when they are bounded visible ASCII;
-oversized or malformed values are discarded before chi assigns the request ID,
-causing a server-generated identifier to be used for logs and error responses.
+`X-Request-Id` values are accepted only when they are bounded visible ASCII.
+Oversized or malformed values are discarded and the HTTP adapter generates a
+cryptographically random request ID for logs and error responses. Generated
+identifiers do not include the host/pod/container name or another topology
+identifier.
 
 ## Dependency direction
 
