@@ -14,14 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Lamy210/go-template/internal/config"
 	"github.com/go-chi/chi/v5"
 )
 
 func TestHealthEndpoints(t *testing.T) {
 	t.Parallel()
 
-	server := New(
+	server := newTestServer(t,
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
@@ -51,7 +50,7 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 		return errors.New(internalDetail)
 	}
 
-	server := New(
+	server := newTestServer(t,
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
@@ -90,7 +89,7 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 func TestVersionEndpoint(t *testing.T) {
 	t.Parallel()
 
-	server := New(
+	server := newTestServer(t,
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
@@ -117,7 +116,7 @@ func TestVersionEndpoint(t *testing.T) {
 func TestOpenAPIEndpoint(t *testing.T) {
 	t.Parallel()
 
-	server := New(
+	server := newTestServer(t,
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
@@ -225,7 +224,7 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
-	server := New(
+	server := newTestServer(t,
 		testConfig(),
 		logger,
 		testServiceInfo(),
@@ -399,14 +398,30 @@ func TestRouteObserverIgnoresUnmatchedRoute(t *testing.T) {
 	}
 }
 
-func testConfig() config.HTTPConfig {
-	return config.HTTPConfig{
+func newTestServer(
+	t *testing.T,
+	cfg Config,
+	logger *slog.Logger,
+	info ServiceInfo,
+	ready ReadinessCheck,
+	opts ...Option,
+) *Server {
+	t.Helper()
+
+	server, err := New(cfg, logger, info, ready, opts...)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return server
+}
+
+func testConfig() Config {
+	return Config{
 		Addr:              ":0",
 		ReadHeaderTimeout: time.Second,
 		ReadTimeout:       time.Second,
 		WriteTimeout:      time.Second,
 		IdleTimeout:       time.Second,
-		ShutdownTimeout:   time.Second,
 		MaxHeaderBytes:    1 << 20,
 		MaxBodyBytes:      1 << 20,
 	}
