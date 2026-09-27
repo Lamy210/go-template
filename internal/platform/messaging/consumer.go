@@ -13,8 +13,8 @@ import (
 
 // Message is the application-facing subset of a JetStream delivery.
 type Message struct {
-	Subject     string
-	Data        []byte
+	Subject      string
+	Data         []byte
 	NumDelivered uint64
 }
 
