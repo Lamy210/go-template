@@ -12,6 +12,8 @@ import (
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/platform/messaging"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 const (
@@ -419,8 +421,24 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
-	if err := client.ReadinessCheck(time.Second)(ctx); err != nil {
+	if err := client.ReadinessCheck(stream.Name, time.Second)(ctx); err != nil {
 		t.Fatalf("nats readiness: %v", err)
+	}
+
+	adminConn, err := nats.Connect(natsURL, nats.Timeout(2*time.Second))
+	if err != nil {
+		t.Fatalf("open admin nats connection: %v", err)
+	}
+	defer adminConn.Close()
+	adminJS, err := jetstream.New(adminConn)
+	if err != nil {
+		t.Fatalf("create admin jetstream client: %v", err)
+	}
+	if err := adminJS.DeleteStream(ctx, stream.Name); err != nil {
+		t.Fatalf("delete required stream: %v", err)
+	}
+	if err := client.ReadinessCheck(stream.Name, time.Second)(ctx); err == nil {
+		t.Fatal("nats readiness succeeded after required stream deletion")
 	}
 }
 
