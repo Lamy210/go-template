@@ -69,6 +69,8 @@ The application composition root owns the NATS connection lifecycle and combines
 
 Business handlers do not live in `internal/platform/messaging`. A feature owns its subject/filter/durable policy and passes its handler to the platform consumer. Normal shutdown drains buffered consumer work and then drains the NATS connection; both paths are bounded.
 
+Cross-process context propagation is expressed through the stdlib-only `internal/core/propagation` contract. Telemetry implements the propagator, messaging implements the NATS header carrier, and `internal/app` wires them together only when both profiles are enabled.
+
 See [messaging.md](messaging.md).
 
 ## Telemetry boundaries
@@ -95,7 +97,7 @@ The current increments provide:
 - Huma OpenAPI 3.1 generation on top of chi;
 - liveness/readiness probes;
 - optional PostgreSQL with pgx/sqlc/Atlas;
-- optional NATS JetStream with bounded retry/quarantine and readiness;
-- optional OpenTelemetry traces/metrics with OTLP/HTTP export and HTTP instrumentation;
+- optional NATS JetStream with bounded retry/quarantine, readiness, and transport-neutral context propagation;
+- optional OpenTelemetry traces/metrics with OTLP/HTTP export, HTTP instrumentation, and W3C propagation across NATS when both profiles are enabled;
 - unit, transport, database/Testcontainers, messaging, and telemetry export tests;
 - Docker and CI quality gates.
