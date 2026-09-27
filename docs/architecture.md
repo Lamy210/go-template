@@ -24,6 +24,13 @@ Platform packages own protocol and infrastructure translation. For example, appl
 
 Health and version endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be business modules.
 
+The HTTP adapter also owns its transport-level configuration contract (listener
+address, request timeouts, and header/body limits). `internal/app` maps the
+environment-facing process config into that adapter config explicitly. Process
+shutdown budgeting remains at the composition root because it coordinates HTTP,
+messaging, telemetry, and database teardown rather than configuring
+`net/http.Server` itself.
+
 HTTP panic containment is also transport-owned. The adapter returns the same
 generic `internal_error` contract when a response has not started, logs only
 sanitized request metadata, and aborts already-started responses rather than
@@ -47,7 +54,7 @@ Core may depend on the Go standard library only. Core must not import Huma, chi,
 
 The repository keeps optional capabilities at explicit infrastructure boundaries:
 
-- Core/HTTP: config, logging, error semantics, lifecycle, Huma/chi transport.
+- Core/HTTP: environment config, logging, error semantics, lifecycle, and an adapter-owned Huma/chi transport config.
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
 - Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
 - Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.

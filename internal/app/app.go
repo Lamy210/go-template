@@ -173,13 +173,25 @@ func Run(ctx context.Context) error {
 		)
 	}
 
-	server := httpserver.New(
-		cfg.HTTP,
+	server, err := httpserver.New(
+		httpserver.Config{
+			Addr:              cfg.HTTP.Addr,
+			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+			ReadTimeout:       cfg.HTTP.ReadTimeout,
+			WriteTimeout:      cfg.HTTP.WriteTimeout,
+			IdleTimeout:       cfg.HTTP.IdleTimeout,
+			MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
+			MaxBodyBytes:      cfg.HTTP.MaxBodyBytes,
+		},
 		logger,
 		serviceInfo,
 		combineReadiness(readinessChecks...),
 		httpOptions...,
 	)
+	if err != nil {
+		return fmt.Errorf("initialize http server: %w", err)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
