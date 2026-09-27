@@ -70,7 +70,7 @@ See [database.md](database.md).
 
 ## Messaging boundaries
 
-The application composition root owns the NATS connection lifecycle and combines NATS readiness with other enabled dependencies. The messaging adapter owns connection bounds, JetStream stream policy, synchronous deduplicated publishing, and durable pull-consumer mechanics.
+The application composition root owns the NATS connection lifecycle and combines NATS readiness with other enabled dependencies. The messaging adapter owns connection bounds, JetStream stream policy, synchronous deduplicated publishing, and durable pull-consumer mechanics. Readiness verifies the required stream against the same managed stream policy used at startup, so runtime drift in managed limits/subjects/storage policy is treated as not ready rather than merely checking stream existence.
 
 Business handlers do not live in `internal/platform/messaging`. A feature owns its subject/filter/durable policy and passes its handler to the platform consumer. Normal shutdown drains buffered consumer work and then drains the NATS connection; both paths are bounded.
 
