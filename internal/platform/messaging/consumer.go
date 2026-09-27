@@ -284,7 +284,11 @@ func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error
 			err = handlerPanicError{}
 		}
 	}()
-	return handler(ctx, msg)
+
+	if err := handler(ctx, msg); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
