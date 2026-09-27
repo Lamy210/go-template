@@ -93,6 +93,20 @@ The telemetry profile supplies this callback to extract correlation identifiers
 from the active span; when telemetry is disabled, the callback is nil and no
 trace fields are emitted.
 
+## Messaging propagation
+
+The provider also implements the transport-neutral text-map propagation contract
+from `internal/core/propagation`. When the NATS profile is enabled at the same
+time, the application passes the provider to the messaging client.
+
+That lets JetStream publishers inject W3C Trace Context/Baggage into NATS
+headers and consumers restore it before invoking feature handlers. The messaging
+package does not import OpenTelemetry, and the telemetry package does not import
+NATS.
+
+Quarantine messages receive a freshly injected propagation header set from the
+extracted context instead of copying arbitrary original headers.
+
 ## Shutdown
 
 Normal shutdown is ordered:
