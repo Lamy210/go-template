@@ -1,8 +1,12 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -56,5 +60,70 @@ func testConfig() Config {
 		TraceMaxExportBatchSize: 512,
 		TraceBatchTimeout:       5 * time.Second,
 		MaxExportRequestBytes:   4 << 20,
+	}
+}
+
+func TestProviderExportsTracesAndMetricsOverHTTP(t *testing.T) {
+	var mu sync.Mutex
+	requests := map[string]int{}
+
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests[r.URL.Path]++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(collector.Close)
+
+	cfg := testConfig()
+	cfg.Endpoint = collector.URL
+	cfg.MetricInterval = time.Hour
+	cfg.TraceBatchTimeout = time.Hour
+
+	provider, err := Open(
+		context.Background(),
+		cfg,
+		ResourceConfig{
+			ServiceName: "telemetry-test",
+			Version:     "test",
+			Environment: "test",
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	ctx := context.Background()
+	_, span := provider.tracerProvider.Tracer("telemetry-test").Start(ctx, "work")
+	span.End()
+
+	counter, err := provider.meterProvider.Meter("telemetry-test").Int64Counter("work.count")
+	if err != nil {
+		t.Fatalf("create counter: %v", err)
+	}
+	counter.Add(ctx, 1)
+
+	flushCtx, cancelFlush := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := provider.ForceFlush(flushCtx); err != nil {
+		cancelFlush()
+		t.Fatalf("ForceFlush() error = %v", err)
+	}
+	cancelFlush()
+
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := provider.Shutdown(shutdownCtx); err != nil {
+		cancelShutdown()
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	cancelShutdown()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if requests["/v1/traces"] == 0 {
+		t.Fatalf("trace export requests = %v, want /v1/traces", requests)
+	}
+	if requests["/v1/metrics"] == 0 {
+		t.Fatalf("metric export requests = %v, want /v1/metrics", requests)
 	}
 }
