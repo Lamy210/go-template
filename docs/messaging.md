@@ -38,8 +38,9 @@ When `NATS_ENABLED=true`, the application composition root:
 1. creates one bounded NATS connection;
 2. creates or reconciles the configured JetStream stream;
 3. includes NATS/JetStream in `/health/ready` alongside other enabled
-   required dependencies, including verifying that the configured required
-   stream still exists;
+   required dependencies, verifying both that the configured required stream
+   still exists and that the stream fields managed by this template have not
+   drifted;
 4. drains HTTP first and then drains NATS during normal shutdown;
 5. keeps an immediate connection close as a fail-safe for startup failure or
    abnormal exit.
@@ -137,7 +138,9 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
 - consumer drain on cancellation;
-- NATS/JetStream readiness while the required stream exists;
+- NATS/JetStream readiness while the required stream exists with the managed configuration;
+- readiness failure after a managed stream field drifts;
+- readiness recovery after the managed stream configuration is restored;
 - readiness failure after the required stream is deleted.
 
 The profile remains independent of PostgreSQL. When both profiles are enabled,
