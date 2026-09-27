@@ -203,10 +203,15 @@ func accessLog(
 				logRoute = unmatchedRoute
 			}
 
+			status := wrapped.Status()
+			if status == 0 {
+				status = http.StatusOK
+			}
+
 			attrs := []slog.Attr{
 				slog.String("method", r.Method),
 				slog.String("route", logRoute),
-				slog.Int("status", wrapped.Status()),
+				slog.Int("status", status),
 				slog.Int("bytes", wrapped.BytesWritten()),
 				slog.Int64("duration_ms", time.Since(started).Milliseconds()),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
