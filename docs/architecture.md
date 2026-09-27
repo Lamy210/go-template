@@ -45,9 +45,9 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 - Core/HTTP: config, logging, error semantics, lifecycle, Huma/chi transport.
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
 - Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
-- Future telemetry profiles should follow the same rule.
+- Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.
 
-A profile must be removable without forcing unrelated application code to understand it. PostgreSQL and NATS therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
+A profile must be removable without forcing unrelated application code to understand it. PostgreSQL, NATS, and telemetry therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
 ## PostgreSQL boundaries
 
@@ -71,6 +71,16 @@ Business handlers do not live in `internal/platform/messaging`. A feature owns i
 
 See [messaging.md](messaging.md).
 
+## Telemetry boundaries
+
+The application composition root owns the OpenTelemetry provider lifecycle. The telemetry adapter owns OTLP/HTTP exporters, SDK bounds, resource attributes, W3C propagation, and the HTTP instrumentation middleware.
+
+Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
+
+Shutdown order is HTTP first, NATS second when enabled, and telemetry last so completed work can be flushed before process exit.
+
+See [telemetry.md](telemetry.md).
+
 ## Current bootstrap
 
 The current increments provide:
@@ -86,7 +96,6 @@ The current increments provide:
 - liveness/readiness probes;
 - optional PostgreSQL with pgx/sqlc/Atlas;
 - optional NATS JetStream with bounded retry/quarantine and readiness;
-- unit, transport, database/Testcontainers, and messaging integration tests;
+- optional OpenTelemetry traces/metrics with OTLP/HTTP export and HTTP instrumentation;
+- unit, transport, database/Testcontainers, messaging, and telemetry export tests;
 - Docker and CI quality gates.
-
-Telemetry remains an uncoupled future optional profile.
