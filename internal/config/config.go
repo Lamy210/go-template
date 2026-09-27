@@ -30,6 +30,7 @@ type Config struct {
 	HTTP        HTTPConfig
 	Database    DatabaseConfig
 	NATS        NATSConfig
+	Telemetry   TelemetryConfig
 }
 
 // HTTPConfig contains HTTP server limits and timeout policy.
@@ -88,6 +89,10 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	telemetryConfig, err := loadTelemetry(lookup)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		ServiceName: stringValue(lookup, "SERVICE_NAME", defaultServiceName),
@@ -104,7 +109,8 @@ func load(lookup lookupEnv) (Config, error) {
 			MaxBodyBytes:      maxBodyBytes,
 		},
 		Database: databaseConfig,
-		NATS:     natsConfig,
+		NATS:      natsConfig,
+		Telemetry: telemetryConfig,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -149,6 +155,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.NATS.Validate(); err != nil {
+		return err
+	}
+	if err := c.Telemetry.Validate(); err != nil {
 		return err
 	}
 	return nil
