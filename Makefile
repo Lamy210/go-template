@@ -20,8 +20,7 @@ test:
 	$(GO) test ./...
 
 test-integration:
-	@test -n "$(DATABASE_URL)" || (echo "DATABASE_URL is required" && exit 1)
-	DATABASE_URL="$(DATABASE_URL)" $(GO) test -tags=integration ./test/integration/...
+	$(GO) test -tags=integration ./test/integration/...
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
