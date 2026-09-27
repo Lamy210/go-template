@@ -121,6 +121,8 @@ acknowledgement failure is still reported as an error.
 Messaging operation failures set an error status and a type-only `error.type`
 attribute. The adapter deliberately does not record the raw error message as a
 span event, avoiding accidental export of dependency or handler diagnostics.
+Handler panics are converted to a generic typed failure before they reach this
+boundary, so the panic value is not exported through tracing.
 
 The messaging package does not import OpenTelemetry, and the telemetry package
 does not import NATS.
