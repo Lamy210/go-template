@@ -36,6 +36,11 @@ generic `internal_error` contract when a response has not started, logs only
 sanitized request metadata, and aborts already-started responses rather than
 appending a misleading error payload.
 
+Request correlation is also treated as an HTTP trust boundary. Client-supplied
+`X-Request-Id` values are accepted only when they are bounded visible ASCII;
+oversized or malformed values are discarded before chi assigns the request ID,
+causing a server-generated identifier to be used for logs and error responses.
+
 ## Dependency direction
 
 ```text

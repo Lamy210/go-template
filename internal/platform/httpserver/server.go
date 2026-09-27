@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	apiVersion     = "0.1.0"
-	unmatchedRoute = "<unmatched>"
+	apiVersion              = "0.1.0"
+	unmatchedRoute          = "<unmatched>"
+	maxClientRequestIDBytes = 128
 )
 
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
@@ -89,6 +90,7 @@ func New(
 	}
 
 	router := chi.NewRouter()
+	router.Use(sanitizeRequestID)
 	router.Use(middleware.RequestID)
 	// Keep the access logger outside panic recovery so recovered panics are
 	// recorded as completed 500 responses rather than skipping the post-handler log.
@@ -117,6 +119,28 @@ func New(
 			MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		},
 	}, nil
+}
+
+func sanitizeRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get(middleware.RequestIDHeader)
+		if requestID != "" && !validClientRequestID(requestID) {
+			r.Header.Del(middleware.RequestIDHeader)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validClientRequestID(value string) bool {
+	if value == "" || len(value) > maxClientRequestIDBytes {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < 0x21 || value[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 func newAPIConfig() huma.Config {
