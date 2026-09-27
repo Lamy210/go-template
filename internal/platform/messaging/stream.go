@@ -48,18 +48,18 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	defer cancel()
 
 	_, err := c.js.CreateOrUpdateStream(requestCtx, jetstream.StreamConfig{
-		Name:            cfg.Name,
-		Subjects:        cfg.Subjects,
-		Retention:       jetstream.LimitsPolicy,
-		MaxConsumers:    cfg.MaxConsumers,
-		MaxMsgs:         cfg.MaxMessages,
-		MaxBytes:        cfg.MaxBytes,
-		Discard:         jetstream.DiscardOld,
-		MaxAge:          cfg.MaxAge,
-		MaxMsgSize:      cfg.MaxMessageSize,
-		Storage:         jetstream.FileStorage,
-		Replicas:        1,
-		Duplicates:      cfg.DuplicateWindow,
+		Name:         cfg.Name,
+		Subjects:     cfg.Subjects,
+		Retention:    jetstream.LimitsPolicy,
+		MaxConsumers: cfg.MaxConsumers,
+		MaxMsgs:      cfg.MaxMessages,
+		MaxBytes:     cfg.MaxBytes,
+		Discard:      jetstream.DiscardOld,
+		MaxAge:       cfg.MaxAge,
+		MaxMsgSize:   cfg.MaxMessageSize,
+		Storage:      jetstream.FileStorage,
+		Replicas:     1,
+		Duplicates:   cfg.DuplicateWindow,
 	})
 	if err != nil {
 		return newOperationError("create or update jetstream stream", err)
