@@ -221,6 +221,11 @@ func TestAccessLogDoesNotLogUnmatchedRawPath(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	router := chi.NewRouter()
 	router.Use(accessLog(logger, nil, nil))
+	// chi bypasses middleware entirely when a mux has no registered routes.
+	// Register an unrelated route so this test matches the production router.
+	router.Get("/registered", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	req := httptest.NewRequest(http.MethodGet, sensitivePath, nil)
 	res := httptest.NewRecorder()
