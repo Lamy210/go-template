@@ -463,7 +463,7 @@ func workerConfig(stream messaging.StreamConfig, durable, filter string) messagi
 		Durable:            durable,
 		FilterSubject:      filter,
 		QuarantineSubject:  "template.events.quarantine",
-		AckWait:            2 * time.Second,
+		AckWait:            3 * time.Second,
 		ProcessAttempts:    2,
 		QuarantineAttempts: 2,
 		MaxAckPending:      8,
