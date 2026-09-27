@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Lamy210/go-template/internal/config"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
@@ -67,14 +66,21 @@ type Server struct {
 	handler    http.Handler
 }
 
-// New builds the HTTP server with bounded request sizes and timeout defaults.
+// New builds a validated HTTP server from adapter-owned transport settings.
 func New(
-	cfg config.HTTPConfig,
+	cfg Config,
 	logger *slog.Logger,
 	info ServiceInfo,
 	ready ReadinessCheck,
 	opts ...Option,
-) *Server {
+) (*Server, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	if logger == nil {
+		return nil, errors.New("http logger must not be nil")
+	}
+
 	var options serverOptions
 	for _, option := range opts {
 		if option != nil {
@@ -110,7 +116,7 @@ func New(
 			IdleTimeout:       cfg.IdleTimeout,
 			MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		},
-	}
+	}, nil
 }
 
 func newAPIConfig() huma.Config {
