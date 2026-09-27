@@ -25,7 +25,16 @@ JetStream consumers are also configured explicitly:
 - finite quarantine-publish attempts;
 - finite `MaxAckPending`;
 - bounded handler and ack timeouts;
+- `AckWait` strictly greater than `HandlerTimeout + AckTimeout`;
 - delayed retry rather than immediate hot-loop redelivery.
+
+The consumer currently does not send periodic `InProgress` acknowledgements.
+JetStream redelivers an unacknowledged message after `AckWait`, so the template
+reserves enough acknowledgement budget for the full bounded handler execution
+plus the bounded `DoubleAck` confirmation. The default is therefore
+`AckWait=40s`, `HandlerTimeout=30s`, and `AckTimeout=5s`, leaving 5 seconds
+of scheduling/network slack. Invalid combinations fail validation before the
+consumer starts.
 
 JetStream streams are created with finite message count, byte, age, consumer,
 and single-message-size limits. The template never relies on JetStream's
