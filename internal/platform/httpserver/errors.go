@@ -55,7 +55,17 @@ func toHTTPError(ctx context.Context, err error) error {
 		)
 	}
 
-	status := statusForKind(appErr.Kind())
+	status, mapped := statusForKind(appErr.Kind())
+	if !mapped {
+		return newErrorResponse(
+			ctx,
+			http.StatusInternalServerError,
+			internalErrorCode,
+			"internal server error",
+			nil,
+		)
+	}
+
 	code := string(appErr.Code())
 	if code == "" {
 		code = fallbackCodeForStatus(status)
@@ -162,26 +172,26 @@ func newErrorResponse(
 	}
 }
 
-func statusForKind(kind apperror.Kind) int {
+func statusForKind(kind apperror.Kind) (int, bool) {
 	switch kind {
 	case apperror.KindInvalidArgument:
-		return http.StatusBadRequest
+		return http.StatusBadRequest, true
 	case apperror.KindUnauthenticated:
-		return http.StatusUnauthorized
+		return http.StatusUnauthorized, true
 	case apperror.KindPermissionDenied:
-		return http.StatusForbidden
+		return http.StatusForbidden, true
 	case apperror.KindNotFound:
-		return http.StatusNotFound
+		return http.StatusNotFound, true
 	case apperror.KindConflict:
-		return http.StatusConflict
+		return http.StatusConflict, true
 	case apperror.KindResourceExhausted:
-		return http.StatusTooManyRequests
+		return http.StatusTooManyRequests, true
 	case apperror.KindUnavailable:
-		return http.StatusServiceUnavailable
+		return http.StatusServiceUnavailable, true
 	case apperror.KindInternal:
-		return http.StatusInternalServerError
+		return http.StatusInternalServerError, true
 	default:
-		return http.StatusInternalServerError
+		return http.StatusInternalServerError, false
 	}
 }
 
