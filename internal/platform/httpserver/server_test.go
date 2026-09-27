@@ -18,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func TestSanitizeRequestIDBoundary(t *testing.T) {
+func TestRequestIDBoundary(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -64,13 +64,11 @@ func TestSanitizeRequestIDBoundary(t *testing.T) {
 
 			var gotContextID string
 			var gotHeader string
-			handler := sanitizeRequestID(
-				middleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					gotContextID = middleware.GetReqID(r.Context())
-					gotHeader = r.Header.Get(middleware.RequestIDHeader)
-					w.WriteHeader(http.StatusNoContent)
-				})),
-			)
+			handler := requestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotContextID = middleware.GetReqID(r.Context())
+				gotHeader = r.Header.Get(middleware.RequestIDHeader)
+				w.WriteHeader(http.StatusNoContent)
+			}))
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tt.requestID != "" {
@@ -102,8 +100,51 @@ func TestSanitizeRequestIDBoundary(t *testing.T) {
 			if gotHeader != "" {
 				t.Fatalf("invalid request ID header was not removed: %q", gotHeader)
 			}
+			if !generatedRequestIDShape(gotContextID) {
+				t.Fatalf("generated request ID has unexpected shape: %q", gotContextID)
+			}
 		})
 	}
+}
+
+func TestRequestIDGeneratesDistinctIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	var ids []string
+	handler := requestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ids = append(ids, middleware.GetReqID(r.Context()))
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+		}
+	}
+
+	if len(ids) != 2 {
+		t.Fatalf("generated request ID count = %d, want 2", len(ids))
+	}
+	if ids[0] == ids[1] {
+		t.Fatalf("generated request IDs are equal: %q", ids[0])
+	}
+}
+
+func generatedRequestIDShape(value string) bool {
+	if len(value) < 26 || len(value) > maxClientRequestIDBytes {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		if (value[i] >= 'A' && value[i] <= 'Z') ||
+			(value[i] >= '2' && value[i] <= '7') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func TestHealthEndpoints(t *testing.T) {
