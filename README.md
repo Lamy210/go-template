@@ -80,7 +80,7 @@ make test-messaging
 make nats-down
 ```
 
-The application opens NATS and reconciles the configured stream only when `NATS_ENABLED=true`. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker. When telemetry is also enabled, W3C Trace Context/Baggage is propagated through NATS headers into consumer handler contexts.
+The application opens NATS and reconciles the configured stream only when `NATS_ENABLED=true`. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker. When telemetry is also enabled, W3C Trace Context/Baggage is propagated through NATS headers and logical publish/process spans are created around messaging operations.
 
 See [docs/messaging.md](docs/messaging.md).
 
