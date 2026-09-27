@@ -125,8 +125,8 @@ func TestDisabledNATSIgnoresNATSSpecificValues(t *testing.T) {
 
 	cfg, err := load(func(key string) (string, bool) {
 		values := map[string]string{
-			"NATS_ENABLED":        "false",
-			"NATS_MAX_RECONNECTS": "-1",
+			"NATS_ENABLED":          "false",
+			"NATS_MAX_RECONNECTS":   "-1",
 			"NATS_STREAM_MAX_BYTES": "not-an-integer",
 		}
 		value, ok := values[key]
