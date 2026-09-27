@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	apiVersion       = "0.1.0"
-	unmatchedRoute   = "<unmatched>"
+	apiVersion     = "0.1.0"
+	unmatchedRoute = "<unmatched>"
 )
 
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
