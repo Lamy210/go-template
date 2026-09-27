@@ -27,6 +27,12 @@ DATABASE_URL=postgres://...
 Pool size, connection lifetime, health period, connect timeout, and readiness
 timeout are separately configurable in `.env.example`.
 
+Configuration is validated at two boundaries: the environment-facing config
+layer and the PostgreSQL adapter itself. The adapter independently rejects an
+empty URL, invalid pool sizes, `MinConns > MaxConns`, and non-positive pool
+timeouts/lifetimes. This keeps the infrastructure package safe when it is reused
+outside the default application composition.
+
 The database URL is treated as a secret. Database infrastructure errors retain
 their underlying cause for `errors.Is` / `errors.As`, but their normal
 `Error()` string contains only the safe operation name. This prevents raw
@@ -106,7 +112,9 @@ lifecycle. Use cases decide when multiple repository operations belong to one
 transaction; repositories do not start transactions on their own.
 
 Integration tests verify that rollback occurs and that the original callback
-error remains discoverable through `errors.Is`.
+error remains discoverable through `errors.Is`. The helper also rejects a nil
+pool or nil transaction callback instead of allowing a panic at the common
+transaction boundary.
 
 ## Readiness and shutdown
 
