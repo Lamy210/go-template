@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Lamy210/go-template/internal/config"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestHealthEndpoints(t *testing.T) {
@@ -23,7 +24,6 @@ func TestHealthEndpoints(t *testing.T) {
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
-		nil,
 		nil,
 	)
 
@@ -55,7 +55,6 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		ready,
-		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	res := httptest.NewRecorder()
@@ -95,7 +94,6 @@ func TestVersionEndpoint(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		nil,
-		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	res := httptest.NewRecorder()
@@ -123,7 +121,6 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		nil,
-		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
 	res := httptest.NewRecorder()
@@ -147,19 +144,19 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 		logger,
 		testServiceInfo(),
 		nil,
-		func(ctx context.Context) []slog.Attr {
+		WithContextLogAttrs(func(ctx context.Context) []slog.Attr {
 			value, _ := ctx.Value(correlationKey{}).(string)
 			if value == "" {
 				return nil
 			}
 			return []slog.Attr{slog.String("trace_id", value)}
-		},
-		func(next http.Handler) http.Handler {
+		}),
+		WithOuterMiddleware(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				ctx := context.WithValue(r.Context(), correlationKey{}, correlationValue)
 				next.ServeHTTP(w, r.WithContext(ctx))
 			})
-		},
+		}),
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
@@ -179,6 +176,68 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	}
 	if entry["request_id"] == "" {
 		t.Fatal("request_id is empty")
+	}
+}
+
+func TestRouteObserverUsesResolvedChiPattern(t *testing.T) {
+	t.Parallel()
+
+	var gotMethod string
+	var gotRoute string
+
+	router := chi.NewRouter()
+	router.Use(accessLog(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		nil,
+		func(_ context.Context, method, route string) {
+			gotMethod = method
+			gotRoute = route
+		},
+	))
+	router.Get("/widgets/{widgetID}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/widgets/12345", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("GET /widgets/12345 status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+	if gotMethod != http.MethodGet {
+		t.Fatalf("route observer method = %q, want %q", gotMethod, http.MethodGet)
+	}
+	if gotRoute != "/widgets/{widgetID}" {
+		t.Fatalf("route observer route = %q, want %q", gotRoute, "/widgets/{widgetID}")
+	}
+	if gotRoute == req.URL.Path {
+		t.Fatalf("route observer used raw path %q instead of route pattern", gotRoute)
+	}
+}
+
+func TestRouteObserverIgnoresUnmatchedRoute(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	router := chi.NewRouter()
+	router.Use(accessLog(
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		nil,
+		func(context.Context, string, string) {
+			called = true
+		},
+	))
+
+	req := httptest.NewRequest(http.MethodGet, "/not-registered/12345", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("unmatched route status = %d, want %d", res.Code, http.StatusNotFound)
+	}
+	if called {
+		t.Fatal("route observer was called for unmatched raw path")
 	}
 }
 
