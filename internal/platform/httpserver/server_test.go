@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,7 @@ func TestHealthEndpoints(t *testing.T) {
 		testConfig(),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
+		nil,
 		nil,
 	)
 
@@ -53,6 +55,7 @@ func TestReadinessFailureUsesSafeErrorContract(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		ready,
+		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	res := httptest.NewRecorder()
@@ -92,6 +95,7 @@ func TestVersionEndpoint(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		nil,
+		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/version", nil)
 	res := httptest.NewRecorder()
@@ -119,6 +123,7 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
 		testServiceInfo(),
 		nil,
+		nil,
 	)
 	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
 	res := httptest.NewRecorder()
@@ -126,6 +131,47 @@ func TestOpenAPIEndpoint(t *testing.T) {
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("GET /openapi.json status = %d, want %d; body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+}
+
+func TestAccessLogIncludesContextAttributes(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	server := New(
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		func(context.Context) []slog.Attr {
+			return []slog.Attr{
+				slog.String("trace_id", "0123456789abcdef0123456789abcdef"),
+				slog.String("span_id", "0123456789abcdef"),
+			}
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /health/live status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["trace_id"] != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("trace_id = %v", entry["trace_id"])
+	}
+	if entry["span_id"] != "0123456789abcdef" {
+		t.Fatalf("span_id = %v", entry["span_id"])
+	}
+	if entry["request_id"] == "" {
+		t.Fatal("request_id is empty")
 	}
 }
 
