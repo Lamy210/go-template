@@ -394,6 +394,35 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	}
 }
 
+func TestAccessLogUsesImplicitOKStatus(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(logger, nil, nil))
+	router.Get("/implicit-ok", func(http.ResponseWriter, *http.Request) {
+		// Intentionally do not call WriteHeader or Write. net/http still emits
+		// an implicit 200 OK response when the handler returns.
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/implicit-ok", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if got := res.Result().StatusCode; got != http.StatusOK {
+		t.Fatalf("response status = %d, want %d", got, http.StatusOK)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if got := entry["status"]; got != float64(http.StatusOK) {
+		t.Fatalf("access log status = %v, want %d", got, http.StatusOK)
+	}
+}
+
 func TestAccessLogUsesResolvedRoutePattern(t *testing.T) {
 	t.Parallel()
 
