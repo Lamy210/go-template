@@ -248,6 +248,56 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
+	t.Run("handler panic retries without crashing consumer", func(t *testing.T) {
+		const subject = "template.events.panic"
+		var attempts atomic.Int32
+		processed := make(chan struct{}, 1)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+
+		go func() {
+			errCh <- client.RunConsumer(
+				consumerCtx,
+				workerConfig(stream, "panic-worker", subject),
+				func(context.Context, messaging.Message) error {
+					if attempts.Add(1) == 1 {
+						panic("sensitive panic value")
+					}
+					processed <- struct{}{}
+					return nil
+				},
+			)
+		}()
+
+		if _, err := client.Publish(
+			ctx,
+			subject,
+			"panic-1",
+			[]byte("panic-retry"),
+		); err != nil {
+			t.Fatalf("publish panic message: %v", err)
+		}
+
+		select {
+		case <-processed:
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for post-panic retry success")
+		}
+		if got := attempts.Load(); got != 2 {
+			t.Fatalf("handler attempts = %d, want 2", got)
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("panic consumer shutdown: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("panic consumer did not drain")
+		}
+	})
+
 	t.Run("retry then ack", func(t *testing.T) {
 		var attempts atomic.Int32
 		processed := make(chan struct{}, 1)
