@@ -85,15 +85,14 @@ func TestConfigValidationDoesNotExposeURL(t *testing.T) {
 	t.Parallel()
 
 	cfg := validDatabaseConfig()
-	cfg.URL = "postgres://secret-user:secret-password@example.invalid/app"
+	cfg.URL = "postgres://example.invalid/app?application_name=sensitive-marker"
 	cfg.MaxConns = 0
 
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatal("Validate() error = nil, want error")
 	}
-	if strings.Contains(err.Error(), "secret-user") ||
-		strings.Contains(err.Error(), "secret-password") ||
+	if strings.Contains(err.Error(), "sensitive-marker") ||
 		strings.Contains(err.Error(), "example.invalid") {
 		t.Fatalf("Validate() exposed database URL: %q", err.Error())
 	}
@@ -103,14 +102,15 @@ func TestOpenRejectsInvalidConfigBeforeDriverParsing(t *testing.T) {
 	t.Parallel()
 
 	cfg := validDatabaseConfig()
-	cfg.URL = "postgres://secret-user:secret-password@example.invalid/app"
+	cfg.URL = "postgres://example.invalid/app?application_name=sensitive-marker"
 	cfg.MinConns = cfg.MaxConns + 1
 
 	_, err := Open(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("Open() error = nil, want validation error")
 	}
-	if strings.Contains(err.Error(), "secret-password") {
+	if strings.Contains(err.Error(), "sensitive-marker") ||
+		strings.Contains(err.Error(), "example.invalid") {
 		t.Fatalf("Open() exposed database URL: %q", err.Error())
 	}
 }
@@ -141,7 +141,7 @@ func TestInTxRejectsInvalidInputs(t *testing.T) {
 
 func validDatabaseConfig() Config {
 	return Config{
-		URL:               "postgres://app:app@127.0.0.1:5432/app?sslmode=disable",
+		URL:               "postgres://127.0.0.1:5432/app?sslmode=disable",
 		MaxConns:          10,
 		MinConns:          1,
 		MaxConnLifetime:   30 * time.Minute,
