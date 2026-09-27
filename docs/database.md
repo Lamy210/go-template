@@ -120,3 +120,30 @@ When the profile is enabled:
 
 A database error can make readiness fail, but its raw dependency text is not
 returned to HTTP clients.
+
+## Testcontainers
+
+Integration tests live in their own Go module under `test/integration` so the
+main service dependency graph does not inherit Testcontainers and its Docker
+client dependencies.
+
+Running:
+
+```bash
+make test-integration
+```
+
+without `DATABASE_URL` starts a pinned PostgreSQL 18.6 container using
+Testcontainers for Go, applies the repository migrations as ordered init
+scripts, runs the same generated-query / transaction / readiness tests, and
+removes the container afterward.
+
+To test against an already-running database instead:
+
+```bash
+make test-integration-external DATABASE_URL='postgres://...'
+```
+
+CI keeps both paths: the `database` job validates Atlas against a fresh service
+database, while the `testcontainers` job proves that integration tests are
+self-contained and portable.

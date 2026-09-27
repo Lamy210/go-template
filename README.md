@@ -8,7 +8,7 @@ The design principle is: **small enough for a small service, structured enough f
 
 The repository is being bootstrapped incrementally. Core/HTTP provides typed configuration, structured logging, transport-neutral application errors, safe HTTP error translation, build metadata, explicit server limits/timeouts, graceful shutdown, Huma-generated OpenAPI, health probes, tests, Docker, and CI.
 
-An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness, explicit transaction boundaries, local Compose, and fresh-database integration tests. It is disabled by default so DB-free services stay simple.
+An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness, explicit transaction boundaries, local Compose, fresh-database integration tests, and self-contained Testcontainers execution. It is disabled by default so DB-free services stay simple.
 
 ## Requirements
 
@@ -59,10 +59,10 @@ For local PostgreSQL:
 make db-up
 export DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
 make migrate-up
-make test-integration
+make test-integration-external DATABASE_URL="$DATABASE_URL"
 ```
 
-Application startup never runs migrations automatically. Generated sqlc code and `migrations/atlas.sum` are committed and checked for drift in CI.
+Application startup never runs migrations automatically. Generated sqlc code and `migrations/atlas.sum` are committed and checked for drift in CI. `make test-integration` can run without a pre-existing database by starting PostgreSQL through Testcontainers.
 
 See [docs/database.md](docs/database.md).
 
@@ -112,7 +112,7 @@ sql/
   schema/                  desired SQL schema
   queries/                 named sqlc queries
 test/
-  integration/             real dependency integration tests
+  integration/             separate Go module; external DB or Testcontainers
 docs/
   architecture.md
   core.md
