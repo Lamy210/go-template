@@ -86,6 +86,9 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := validateSettlementBudget(cfg, c.requestTimeout); err != nil {
+		return err
+	}
 	processAttempts, totalAttempts, err := deliveryAttemptLimits(cfg)
 	if err != nil {
 		return err
@@ -289,6 +292,23 @@ func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error
 		return err
 	}
 	return ctx.Err()
+}
+
+func validateSettlementBudget(cfg ConsumerConfig, publishTimeout time.Duration) error {
+	remaining := cfg.AckWait
+	for _, phase := range []time.Duration{
+		cfg.HandlerTimeout,
+		publishTimeout,
+		cfg.AckTimeout,
+	} {
+		if phase <= 0 || phase >= remaining {
+			return fmt.Errorf(
+				"consumer ack wait must exceed handler timeout plus publish timeout plus ack timeout",
+			)
+		}
+		remaining -= phase
+	}
+	return nil
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
