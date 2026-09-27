@@ -64,9 +64,11 @@ composition root wires the OpenTelemetry provider into both interfaces.
 Each synchronous publish creates a PRODUCER span before propagation headers are
 injected, so the publish span context becomes the message creation context. Each
 business handler attempt creates a CONSUMER process span after extracting the
-message context. Quarantine publishing also goes through the same publish path,
-so quarantine delivery receives a new creation context instead of silently
-reusing the original producer span.
+message context. The process span remains open through message settlement: a
+successful handler is not reported as successful until `DoubleAck` succeeds,
+and retry/quarantine decisions occur before a failed process span is closed.
+Quarantine publishing also goes through the same publish path and, when triggered
+directly by a failed handler attempt, is parented to that process operation.
 
 The messaging package itself does not import OpenTelemetry. Feature handlers
 only receive a standard `context.Context`.

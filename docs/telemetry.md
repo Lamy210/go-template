@@ -114,7 +114,9 @@ JetStream publish operations create `publish {subject}` PRODUCER spans with
 `messaging.system=nats`, the destination subject, and messaging operation
 attributes. The resulting span context is then injected as W3C Trace
 Context/Baggage. Consumer handler attempts restore that context and create
-`process {subject}` CONSUMER spans.
+`process {subject}` CONSUMER spans. Process spans cover both handler execution
+and the immediate settlement outcome, so a handler success followed by an
+acknowledgement failure is still reported as an error.
 
 Messaging operation failures set an error status and a type-only `error.type`
 attribute. The adapter deliberately does not record the raw error message as a

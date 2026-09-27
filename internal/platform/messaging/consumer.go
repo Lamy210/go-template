@@ -214,14 +214,17 @@ func (c *Client) handleDelivery(
 		NumDelivered: metadata.NumDelivered,
 	})
 	cancel()
-	endOperation(handlerErr)
 
 	if handlerErr == nil {
-		if err := doubleAck(parent, msg, cfg.AckTimeout); err != nil {
-			reportFatal(err)
+		ackErr := doubleAck(parent, msg, cfg.AckTimeout)
+		endOperation(ackErr)
+		if ackErr != nil {
+			reportFatal(ackErr)
 		}
 		return
 	}
+
+	defer endOperation(handlerErr)
 
 	if metadata.NumDelivered < processAttempts {
 		if err := msg.NakWithDelay(cfg.RetryDelay); err != nil {
@@ -230,7 +233,7 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	c.quarantine(deliveryCtx, cfg, totalAttempts, msg, metadata, reportFatal)
+	c.quarantine(processCtx, cfg, totalAttempts, msg, metadata, reportFatal)
 }
 
 func (c *Client) quarantine(
