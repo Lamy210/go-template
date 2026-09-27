@@ -83,6 +83,9 @@ func TestRequestIDBoundary(t *testing.T) {
 			if gotContextID == "" {
 				t.Fatal("request ID context is empty")
 			}
+			if got := res.Header().Get(middleware.RequestIDHeader); got != gotContextID {
+				t.Fatalf("response request ID = %q, want context ID %q", got, gotContextID)
+			}
 
 			if tt.wantKeep {
 				if gotContextID != tt.requestID {
