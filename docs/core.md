@@ -33,7 +33,7 @@ The default is to keep code close to its owner.
 
 Defines transport-neutral application error semantics:
 
-- `Kind`: coarse semantic classification used by adapters;
+- `Kind`: coarse semantic classification used by adapters, with `Valid()` defining the known architecture-level set;
 - `Code`: stable machine-readable application code;
 - `Detail`: safe structured client-facing information;
 - `Error`: safe public message plus an optional wrapped cause.
@@ -59,6 +59,11 @@ Business/application code should return either:
 - a wrapped Go error with useful internal context when no semantic mapping is required yet.
 
 Transport adapters translate application errors into their protocol-specific representation.
+They must fail closed when they encounter a semantic kind they do not explicitly
+map. For example, HTTP converts an unmapped kind to the generic internal-error
+contract instead of exposing its code, public message, or details. This prevents
+a future or malformed kind from accidentally turning into a public 500 payload.
+
 They also own protocol-specific panic containment. The HTTP adapter must not
 emit raw panic values or stack traces; the messaging adapter converts feature
 handler panics into a generic bounded-processing failure.
