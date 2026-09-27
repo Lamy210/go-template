@@ -158,6 +158,9 @@ func (c *Client) Drain(ctx context.Context) error {
 
 	for {
 		if c.conn.IsClosed() {
+			if err := c.conn.LastError(); errors.Is(err, nats.ErrDrainTimeout) {
+				return newOperationError("drain nats connection", err)
+			}
 			return nil
 		}
 		select {
