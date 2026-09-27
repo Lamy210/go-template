@@ -24,6 +24,12 @@ type Message struct {
 // the error text is never copied into quarantine messages or generic logs.
 type Handler func(context.Context, Message) error
 
+type handlerPanicError struct{}
+
+func (handlerPanicError) Error() string {
+	return "messaging handler panicked"
+}
+
 // ConsumerConfig configures one durable pull consumer and its retry/quarantine
 // policy.
 type ConsumerConfig struct {
@@ -208,7 +214,7 @@ func (c *Client) handleDelivery(
 	}
 
 	handlerCtx, cancel := context.WithTimeout(processCtx, cfg.HandlerTimeout)
-	handlerErr := handler(handlerCtx, Message{
+	handlerErr := invokeHandler(handlerCtx, handler, Message{
 		Subject:      msg.Subject(),
 		Data:         append([]byte(nil), msg.Data()...),
 		NumDelivered: metadata.NumDelivered,
@@ -266,6 +272,15 @@ func (c *Client) quarantine(
 	if err := doubleAck(parent, msg, cfg.AckTimeout); err != nil {
 		reportFatal(err)
 	}
+}
+
+func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = handlerPanicError{}
+		}
+	}()
+	return handler(ctx, msg)
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
