@@ -11,7 +11,7 @@ import (
 const (
 	defaultTelemetryEnabled                 = false
 	defaultTelemetryEndpoint                = "http://127.0.0.1:4318"
-	defaultTelemetryExportTimeout           = 5 * time.Second
+	defaultTelemetryExportTimeout           = 15 * time.Second
 	defaultTelemetryRetryInitialInterval    = 500 * time.Millisecond
 	defaultTelemetryRetryMaxInterval        = 2 * time.Second
 	defaultTelemetryRetryMaxElapsedTime     = 10 * time.Second
@@ -214,6 +214,9 @@ func (c TelemetryConfig) Validate() error {
 	}
 	if c.RetryMaxElapsedTime < c.RetryInitialInterval {
 		return fmt.Errorf("TELEMETRY_RETRY_MAX_ELAPSED_TIME must not be less than TELEMETRY_RETRY_INITIAL_INTERVAL")
+	}
+	if c.RetryMaxElapsedTime > c.ExportTimeout {
+		return fmt.Errorf("TELEMETRY_RETRY_MAX_ELAPSED_TIME must not exceed TELEMETRY_EXPORT_TIMEOUT")
 	}
 	if c.MetricInterval <= 0 {
 		return fmt.Errorf("TELEMETRY_METRIC_INTERVAL must be positive")
