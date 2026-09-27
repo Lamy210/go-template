@@ -10,8 +10,30 @@ import (
 	"testing"
 	"time"
 
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/platform/messaging"
 )
+
+const testCorrelationHeader = "X-Test-Correlation"
+
+type testPropagationKey struct{}
+
+type testPropagator struct{}
+
+func (testPropagator) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) {
+	value, _ := ctx.Value(testPropagationKey{}).(string)
+	if value != "" {
+		carrier.Set(testCorrelationHeader, value)
+	}
+}
+
+func (testPropagator) Extract(ctx context.Context, carrier coreprop.TextMapCarrier) context.Context {
+	value := carrier.Get(testCorrelationHeader)
+	if value == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, testPropagationKey{}, value)
+}
 
 func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	natsURL := os.Getenv("NATS_URL")
@@ -27,7 +49,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		MaxReconnects:  5,
 		DrainTimeout:   3 * time.Second,
 		RequestTimeout: 2 * time.Second,
-	})
+	}, messaging.WithPropagator(testPropagator{}))
 	if err != nil {
 		t.Fatalf("open nats client: %v", err)
 	}
@@ -73,6 +95,54 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		t.Fatalf("deduplicated sequence changed: first=%d second=%d", first.Sequence, second.Sequence)
 	}
 
+	t.Run("propagates context through message headers", func(t *testing.T) {
+		const correlation = "publish-to-handler"
+		observed := make(chan string, 1)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+
+		go func() {
+			errCh <- client.RunConsumer(
+				consumerCtx,
+				workerConfig(stream, "propagation-worker", "template.events.propagation"),
+				func(handlerCtx context.Context, _ messaging.Message) error {
+					value, _ := handlerCtx.Value(testPropagationKey{}).(string)
+					observed <- value
+					return nil
+				},
+			)
+		}()
+
+		publishCtx := context.WithValue(ctx, testPropagationKey{}, correlation)
+		if _, err := client.Publish(
+			publishCtx,
+			"template.events.propagation",
+			"propagation-1",
+			[]byte("propagation"),
+		); err != nil {
+			t.Fatalf("publish propagation message: %v", err)
+		}
+
+		select {
+		case got := <-observed:
+			if got != correlation {
+				t.Fatalf("handler correlation = %q, want %q", got, correlation)
+			}
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for propagated context")
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("propagation consumer shutdown: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("propagation consumer did not drain")
+		}
+	})
+
 	t.Run("retry then ack", func(t *testing.T) {
 		var attempts atomic.Int32
 		processed := make(chan struct{}, 1)
@@ -114,17 +184,30 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	})
 
 	t.Run("quarantine after bounded processing attempts", func(t *testing.T) {
-		quarantined := make(chan messaging.Message, 1)
+		const correlation = "quarantine-correlation"
+		type quarantinedDelivery struct {
+			message     messaging.Message
+			correlation string
+		}
+		quarantined := make(chan quarantinedDelivery, 1)
 
 		quarantineCtx, stopQuarantine := context.WithCancel(ctx)
 		quarantineErr := make(chan error, 1)
 		go func() {
 			cfg := workerConfig(stream, "quarantine-observer", "template.events.quarantine")
 			cfg.QuarantineSubject = "template.events.quarantine.failed"
-			quarantineErr <- client.RunConsumer(quarantineCtx, cfg, func(_ context.Context, msg messaging.Message) error {
-				quarantined <- msg
-				return nil
-			})
+			quarantineErr <- client.RunConsumer(
+				quarantineCtx,
+				cfg,
+				func(handlerCtx context.Context, msg messaging.Message) error {
+					value, _ := handlerCtx.Value(testPropagationKey{}).(string)
+					quarantined <- quarantinedDelivery{
+						message:     msg,
+						correlation: value,
+					}
+					return nil
+				},
+			)
 		}()
 
 		sourceCtx, stopSource := context.WithCancel(ctx)
@@ -138,14 +221,27 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			})
 		}()
 
-		if _, err := client.Publish(ctx, "template.events.fail", "fail-1", []byte("quarantine-me")); err != nil {
+		publishCtx := context.WithValue(ctx, testPropagationKey{}, correlation)
+		if _, err := client.Publish(
+			publishCtx,
+			"template.events.fail",
+			"fail-1",
+			[]byte("quarantine-me"),
+		); err != nil {
 			t.Fatalf("publish failing message: %v", err)
 		}
 
 		select {
-		case msg := <-quarantined:
-			if string(msg.Data) != "quarantine-me" {
-				t.Fatalf("quarantine payload = %q", msg.Data)
+		case delivery := <-quarantined:
+			if string(delivery.message.Data) != "quarantine-me" {
+				t.Fatalf("quarantine payload = %q", delivery.message.Data)
+			}
+			if delivery.correlation != correlation {
+				t.Fatalf(
+					"quarantine correlation = %q, want %q",
+					delivery.correlation,
+					correlation,
+				)
 			}
 		case <-time.After(8 * time.Second):
 			t.Fatal("timed out waiting for quarantine message")
