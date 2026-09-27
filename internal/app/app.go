@@ -11,6 +11,7 @@ import (
 
 	"github.com/Lamy210/go-template/internal/buildinfo"
 	"github.com/Lamy210/go-template/internal/config"
+	"github.com/Lamy210/go-template/internal/platform/database"
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 )
 
@@ -35,9 +36,30 @@ func Run(ctx context.Context) error {
 		BuildTime: info.BuildDate,
 	}
 
-	// The core profile has no required external dependencies, so readiness is
-	// currently nil. Database or broker profiles can compose their checks here.
-	server := httpserver.New(cfg.HTTP, logger, serviceInfo, nil)
+	var ready httpserver.ReadinessCheck
+	if cfg.Database.Enabled {
+		pool, err := database.Open(ctx, database.Config{
+			URL:               cfg.Database.URL,
+			MaxConns:          cfg.Database.MaxConns,
+			MinConns:          cfg.Database.MinConns,
+			MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+			MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+			HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+			ConnectTimeout:    cfg.Database.ConnectTimeout,
+		})
+		if err != nil {
+			return fmt.Errorf("initialize database: %w", err)
+		}
+		defer pool.Close()
+
+		ready = httpserver.ReadinessCheck(database.ReadinessCheck(pool, cfg.Database.HealthTimeout))
+		logger.Info("postgres connection pool ready",
+			"max_conns", cfg.Database.MaxConns,
+			"min_conns", cfg.Database.MinConns,
+		)
+	}
+
+	server := httpserver.New(cfg.HTTP, logger, serviceInfo, ready)
 	errCh := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

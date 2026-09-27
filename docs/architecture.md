@@ -22,7 +22,7 @@ cmd/*
 
 Platform packages own protocol and infrastructure translation. For example, application error kinds live in `internal/core/apperror`, while HTTP status codes and the JSON error response live in `internal/platform/httpserver`.
 
-Health endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be a business module.
+Health and version endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be business modules.
 
 ## Dependency direction
 
@@ -38,19 +38,45 @@ core <- feature/application/platform
 
 Core may depend on the Go standard library only. Core must not import Huma, chi, PostgreSQL, NATS, or feature packages.
 
+## Profiles
+
+The repository keeps optional capabilities at explicit infrastructure boundaries:
+
+- Core/HTTP: config, logging, error semantics, lifecycle, Huma/chi transport.
+- PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
+- Future messaging/telemetry profiles should follow the same rule.
+
+A profile must be removable without forcing unrelated application code to understand it. PostgreSQL therefore defaults to disabled, and the example sqlc package is not imported by the running application.
+
+## PostgreSQL boundaries
+
+The application composition root owns the pgx pool lifecycle. The database adapter owns pool configuration and bounded readiness checks. Use cases own transaction boundaries via `database.InTx`; repositories do not silently begin transactions.
+
+The desired SQL schema and versioned migration history are both checked in CI:
+
+1. sqlc regenerates from `sql/schema` + `sql/queries`;
+2. Atlas verifies migration checksums;
+3. migrations are applied to a fresh PostgreSQL instance;
+4. Atlas compares the migrated database with the desired SQL schema while excluding its revisions table;
+5. integration tests execute generated queries and transaction behavior.
+
+See [database.md](database.md).
+
 ## Current bootstrap
 
-The first increment provides:
+The current increments provide:
 
 - typed environment configuration with startup validation;
 - structured `log/slog` logging;
 - transport-neutral application error semantics;
 - safe HTTP error translation with stable codes and request IDs;
+- build metadata and a version endpoint;
 - a bounded HTTP server with explicit timeouts and request/body limits;
 - graceful shutdown;
 - Huma OpenAPI 3.1 generation on top of chi;
 - liveness/readiness probes;
-- unit/transport tests;
+- optional PostgreSQL with pgx/sqlc/Atlas;
+- unit, transport, and database integration tests;
 - Docker and CI quality gates.
 
-Database, messaging, telemetry, and code generation are intentionally not coupled into the core bootstrap. They should be added as optional profiles so that deleting an unused profile does not break the service skeleton.
+Messaging and telemetry remain uncoupled optional profiles.

@@ -6,14 +6,15 @@ The design principle is: **small enough for a small service, structured enough f
 
 ## Current status
 
-The repository is being bootstrapped incrementally. The current HTTP profile provides typed configuration, structured logging, transport-neutral application errors, safe HTTP error translation, build metadata, explicit server limits/timeouts, graceful shutdown, Huma-generated OpenAPI, health probes, tests, Docker, and CI.
+The repository is being bootstrapped incrementally. Core/HTTP provides typed configuration, structured logging, transport-neutral application errors, safe HTTP error translation, build metadata, explicit server limits/timeouts, graceful shutdown, Huma-generated OpenAPI, health probes, tests, Docker, and CI.
 
-Database, messaging, telemetry, migrations, and other optional profiles are added separately so that the core remains removable and understandable.
+An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness, explicit transaction boundaries, local Compose, and fresh-database integration tests. It is disabled by default so DB-free services stay simple.
 
 ## Requirements
 
 - Go 1.27.x
-- Docker (optional)
+- Docker (optional for the application; used by local PostgreSQL and CI database workflows)
+- sqlc / Atlas CLI only when working on the PostgreSQL profile locally
 
 ## Quick start
 
@@ -46,17 +47,37 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 `SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`.
 
-Invalid or unsafe configuration fails fast before the server begins accepting traffic.
+`DATABASE_ENABLED=false` is the default. When disabled, PostgreSQL-specific settings are intentionally ignored so a stale DB setting cannot break a DB-free service.
+
+Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
+
+## PostgreSQL profile
+
+For local PostgreSQL:
+
+```bash
+make db-up
+export DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
+make migrate-up
+make test-integration
+```
+
+Application startup never runs migrations automatically. Generated sqlc code and `migrations/atlas.sum` are committed and checked for drift in CI.
+
+See [docs/database.md](docs/database.md).
 
 ## Build metadata
 
 Binary metadata is injected at link time through `internal/buildinfo` and exposed through `GET /version`.
 
 ```bash
-make build   VERSION=v1.2.3   COMMIT="$(git rev-parse HEAD)"   BUILD_DATE=2026-09-27T00:00:00Z
+make build \
+  VERSION=v1.2.3 \
+  COMMIT="$(git rev-parse HEAD)" \
+  BUILD_DATE=2026-09-27T00:00:00Z
 ```
 
-The Docker build accepts the same values via `VERSION`, `COMMIT`, and `BUILD_DATE` build arguments. Defaults are deterministic placeholders (`dev` / `unknown`) rather than a generated wall-clock timestamp, so ordinary builds do not become non-reproducible merely by rebuilding.
+The Docker build accepts the same values via `VERSION`, `COMMIT`, and `BUILD_DATE` build arguments. Defaults are deterministic placeholders (`dev` / `unknown`) rather than a generated wall-clock timestamp.
 
 ## Quality gates
 
@@ -68,7 +89,7 @@ make vuln
 make build
 ```
 
-GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, and vulnerability scanning for pull requests and `main`.
+GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, and database integration tests.
 
 ## Repository layout
 
@@ -81,11 +102,21 @@ internal/
   config/                 typed environment configuration
   core/                   stable transport-neutral shared contracts
     apperror/              application error semantics
-  modules/                feature-oriented application modules
-  platform/               transport/infrastructure adapters
+  modules/
+    example/store/sqlc/    removable generated DB example
+  platform/
+    database/              PostgreSQL pool/readiness/transaction boundary
+    httpserver/            HTTP transport
+migrations/                versioned Atlas migrations + atlas.sum
+sql/
+  schema/                  desired SQL schema
+  queries/                 named sqlc queries
+test/
+  integration/             real dependency integration tests
 docs/
   architecture.md
   core.md
+  database.md
   development.md
 ```
 

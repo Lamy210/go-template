@@ -1,0 +1,6 @@
+-- create example_items table used only to validate the removable PostgreSQL profile.
+CREATE TABLE example_items (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL CHECK (char_length(name) > 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
