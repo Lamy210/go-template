@@ -127,6 +127,7 @@ func Run(ctx context.Context) error {
 			messagingOptions = append(
 				messagingOptions,
 				messaging.WithPropagator(telemetryProvider),
+				messaging.WithTracer(telemetryProvider),
 			)
 		}
 
