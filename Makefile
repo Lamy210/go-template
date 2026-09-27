@@ -10,7 +10,7 @@ COMMIT ?= unknown
 BUILD_DATE ?= unknown
 BUILD_LDFLAGS := -s -w -X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' -X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' -X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
 
-.PHONY: dev test test-integration fmt lint vet build vuln check generate generate-check
+.PHONY: dev test test-integration test-integration-external fmt lint vet build vuln check generate generate-check
 .PHONY: db-up db-down migrate-hash migrate-status migrate-up migrate-diff
 
 dev:
@@ -20,8 +20,11 @@ test:
 	$(GO) test ./...
 
 test-integration:
+	cd test/integration && $(GO) test ./...
+
+test-integration-external:
 	@test -n "$(DATABASE_URL)" || (echo "DATABASE_URL is required" && exit 1)
-	DATABASE_URL="$(DATABASE_URL)" $(GO) test -tags=integration ./test/integration/...
+	cd test/integration && DATABASE_URL="$(DATABASE_URL)" $(GO) test ./...
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')

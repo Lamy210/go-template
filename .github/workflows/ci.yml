@@ -37,8 +37,7 @@ jobs:
 
       - name: Verify formatting
         run: |
-          gofmt -w $(find . -name '*.go' -not -path './vendor/*')
-          git diff --exit-code -- '*.go'
+          test -z "$(gofmt -l .)"
 
       - name: Vet
         run: go vet ./...
@@ -150,8 +149,11 @@ jobs:
             exit 1
           fi
 
+      - name: Download integration-test modules
+        run: cd test/integration && go mod download
+
       - name: Run database integration tests
-        run: go test -tags=integration ./test/integration/...
+        run: cd test/integration && go test ./...
 
       - name: Verify generated artifacts are committed
         run: |
@@ -159,6 +161,29 @@ jobs:
           find internal/modules/example/store/sqlc -name '*.go' -print0 | xargs -0 -r git add -N
           git diff --exit-code -- migrations/atlas.sum internal/modules/example/store/sqlc
 
+  testcontainers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Verify integration-test module
+        run: |
+          cd test/integration
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          go mod download
+
+      - name: Run Testcontainers PostgreSQL integration
+        run: |
+          cd test/integration
+          go test ./...
 
   messaging:
     runs-on: ubuntu-latest
@@ -196,7 +221,7 @@ jobs:
           exit 1
 
       - name: Run messaging integration tests
-        run: go test -tags=messaging ./test/integration/...
+        run: go test -tags=messaging ./internal/platform/messaging
 
       - name: Stop NATS
         if: always()

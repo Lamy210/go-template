@@ -1,6 +1,6 @@
 //go:build messaging
 
-package integration
+package messaging_test
 
 import (
 	"context"

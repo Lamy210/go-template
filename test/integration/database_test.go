@@ -1,11 +1,8 @@
-//go:build integration
-
 package integration
 
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -69,15 +66,14 @@ func TestDatabaseReadinessCheck(t *testing.T) {
 func openTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 
-	databaseURL := os.Getenv("DATABASE_URL")
-	if databaseURL == "" {
-		t.Fatal("DATABASE_URL is required")
+	if testDatabaseURL == "" {
+		t.Fatal("test database URL is empty")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 
-	pool, err := pgxpool.New(ctx, databaseURL)
+	pool, err := pgxpool.New(ctx, testDatabaseURL)
 	if err != nil {
 		t.Fatalf("create pool: %v", err)
 	}
