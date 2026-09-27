@@ -98,6 +98,13 @@ small enough for normal NATS header limits and operational inspection.
 Handler error text is not copied into quarantine headers or generic
 infrastructure logs.
 
+A panic from a feature handler is contained at the messaging boundary and
+converted to a generic typed handler failure. The panic value itself is
+discarded rather than logged or copied into telemetry/quarantine metadata. The
+delivery then follows the same finite retry and quarantine policy as an ordinary
+handler error, preventing a poison message from repeatedly crashing the whole
+worker process.
+
 ## Graceful shutdown
 
 The consumer uses JetStream `ConsumeContext.Drain` on normal cancellation so
@@ -125,6 +132,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - message-ID deduplication;
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
+- panic containment followed by bounded retry without crashing the consumer;
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
 - consumer drain on cancellation;
