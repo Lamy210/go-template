@@ -10,8 +10,8 @@ COMMIT ?= unknown
 BUILD_DATE ?= unknown
 BUILD_LDFLAGS := -s -w -X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' -X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' -X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
 
-.PHONY: dev test test-integration test-integration-external fmt lint vet build vuln check generate generate-check
-.PHONY: db-up db-down migrate-hash migrate-status migrate-up migrate-diff
+.PHONY: dev test test-integration test-integration-external test-messaging fmt lint vet build vuln check generate generate-check
+.PHONY: db-up db-down nats-up nats-down migrate-hash migrate-status migrate-up migrate-diff
 
 dev:
 	$(GO) run ./cmd/api
@@ -25,6 +25,9 @@ test-integration:
 test-integration-external:
 	@test -n "$(DATABASE_URL)" || (echo "DATABASE_URL is required" && exit 1)
 	cd test/integration && DATABASE_URL="$(DATABASE_URL)" $(GO) test ./...
+
+test-messaging:
+	NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}" $(GO) test -tags=messaging ./internal/platform/messaging
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
@@ -53,7 +56,13 @@ db-up:
 	docker compose up -d postgres
 
 db-down:
-	docker compose down
+	docker compose rm -sf postgres
+
+nats-up:
+	docker compose up -d nats
+
+nats-down:
+	docker compose rm -sf nats
 
 migrate-hash:
 	$(ATLAS) migrate hash --dir "file://migrations"
