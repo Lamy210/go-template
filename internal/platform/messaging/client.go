@@ -186,8 +186,9 @@ type PublishAck struct {
 	Duplicate bool
 }
 
-// ReadinessCheck verifies both the core connection and JetStream account API.
-func (c *Client) ReadinessCheck(timeout time.Duration) func(context.Context) error {
+// ReadinessCheck verifies the core connection and that the required JetStream
+// stream is still available.
+func (c *Client) ReadinessCheck(stream string, timeout time.Duration) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if c.conn.Status() != nats.CONNECTED {
 			return newOperationError("nats connection is not ready", errors.New("connection not connected"))
@@ -195,8 +196,8 @@ func (c *Client) ReadinessCheck(timeout time.Duration) func(context.Context) err
 
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		if _, err := c.js.AccountInfo(checkCtx); err != nil {
-			return newOperationError("query jetstream account", err)
+		if _, err := c.js.Stream(checkCtx, stream); err != nil {
+			return newOperationError("query required jetstream stream", err)
 		}
 		return nil
 	}
