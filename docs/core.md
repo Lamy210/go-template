@@ -42,6 +42,15 @@ HTTP status codes are deliberately not part of `apperror`. The HTTP adapter owns
 
 The wrapped cause participates in the standard `errors.Is` / `errors.As` tree, but `Error()` does not include the cause text. This prevents a dependency error containing credentials, SQL, a DSN, or a token from being accidentally exposed through normal error formatting.
 
+### `internal/core/propagation`
+
+Defines the transport-neutral text-map propagation contract shared by adapters:
+
+- `TextMapCarrier`: `Get`, `Set`, and `Keys` over transport headers;
+- `TextMapPropagator`: context injection/extraction.
+
+The package depends only on `context`. It deliberately does not import OpenTelemetry or NATS. The telemetry adapter implements the propagator and the messaging adapter implements the NATS header carrier, so either optional profile remains replaceable.
+
 ## Error ownership
 
 Business/application code should return either:

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	otelprop "go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -77,6 +78,43 @@ func TestLogAttrsWithoutSpanIsEmpty(t *testing.T) {
 
 	if attrs := LogAttrs(context.Background()); len(attrs) != 0 {
 		t.Fatalf("LogAttrs() = %#v, want empty", attrs)
+	}
+}
+
+func TestProviderInjectsAndExtractsW3CTraceContext(t *testing.T) {
+	t.Parallel()
+
+	provider := &Provider{
+		propagator: otelprop.NewCompositeTextMapPropagator(
+			otelprop.TraceContext{},
+			otelprop.Baggage{},
+		),
+	}
+	traceID := trace.TraceID{0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}
+	spanID := trace.SpanID{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}
+	spanContext := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), spanContext)
+	carrier := otelprop.MapCarrier{}
+
+	provider.Inject(ctx, carrier)
+	if carrier.Get("traceparent") == "" {
+		t.Fatal("traceparent was not injected")
+	}
+
+	extracted := provider.Extract(context.Background(), carrier)
+	got := trace.SpanContextFromContext(extracted)
+	if got.TraceID() != traceID {
+		t.Fatalf("extracted trace ID = %s, want %s", got.TraceID(), traceID)
+	}
+	if got.SpanID() != spanID {
+		t.Fatalf("extracted span ID = %s, want %s", got.SpanID(), spanID)
+	}
+	if !got.IsRemote() {
+		t.Fatal("extracted span context is not remote")
 	}
 }
 

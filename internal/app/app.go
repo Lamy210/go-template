@@ -122,6 +122,14 @@ func Run(ctx context.Context) error {
 
 	var natsClient *messaging.Client
 	if cfg.NATS.Enabled {
+		var messagingOptions []messaging.Option
+		if telemetryProvider != nil {
+			messagingOptions = append(
+				messagingOptions,
+				messaging.WithPropagator(telemetryProvider),
+			)
+		}
+
 		natsClient, err = messaging.Open(messaging.ClientConfig{
 			URL:            cfg.NATS.URL,
 			Name:           cfg.ServiceName,
@@ -130,7 +138,7 @@ func Run(ctx context.Context) error {
 			MaxReconnects:  cfg.NATS.MaxReconnects,
 			DrainTimeout:   cfg.NATS.DrainTimeout,
 			RequestTimeout: cfg.NATS.RequestTimeout,
-		})
+		}, messagingOptions...)
 		if err != nil {
 			return fmt.Errorf("initialize nats: %w", err)
 		}
