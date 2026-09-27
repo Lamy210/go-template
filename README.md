@@ -10,10 +10,12 @@ The repository is being bootstrapped incrementally. Core/HTTP provides typed con
 
 An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness, explicit transaction boundaries, local Compose, fresh-database integration tests, and self-contained Testcontainers execution. It is disabled by default so DB-free services stay simple.
 
+An optional NATS JetStream profile adds bounded connection/reconnect policy, explicit stream limits, message-ID deduplication, durable pull consumers, finite retry/quarantine behavior, dependency readiness, and graceful drain. It is also disabled by default.
+
 ## Requirements
 
 - Go 1.27.x
-- Docker (optional for the application; used by local PostgreSQL and CI database workflows)
+- Docker (optional for the application; used by local PostgreSQL/NATS and integration workflows)
 - sqlc / Atlas CLI only when working on the PostgreSQL profile locally
 
 ## Quick start
@@ -47,7 +49,7 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 `SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`.
 
-`DATABASE_ENABLED=false` is the default. When disabled, PostgreSQL-specific settings are intentionally ignored so a stale DB setting cannot break a DB-free service.
+`DATABASE_ENABLED=false` and `NATS_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
 
@@ -65,6 +67,20 @@ make test-integration-external DATABASE_URL="$DATABASE_URL"
 Application startup never runs migrations automatically. Generated sqlc code and `migrations/atlas.sum` are committed and checked for drift in CI. `make test-integration` can run without a pre-existing database by starting PostgreSQL through Testcontainers.
 
 See [docs/database.md](docs/database.md).
+
+## NATS JetStream profile
+
+For local messaging integration:
+
+```bash
+make nats-up
+make test-messaging
+make nats-down
+```
+
+The application opens NATS and reconciles the configured stream only when `NATS_ENABLED=true`. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker.
+
+See [docs/messaging.md](docs/messaging.md).
 
 ## Build metadata
 
@@ -89,7 +105,7 @@ make vuln
 make build
 ```
 
-GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, and database integration tests.
+GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, external-database integration, self-contained Testcontainers integration, and real NATS JetStream integration.
 
 ## Repository layout
 
@@ -107,6 +123,7 @@ internal/
   platform/
     database/              PostgreSQL pool/readiness/transaction boundary
     httpserver/            HTTP transport
+    messaging/             NATS JetStream client/stream/consumer boundary
 migrations/                versioned Atlas migrations + atlas.sum
 sql/
   schema/                  desired SQL schema
@@ -117,6 +134,7 @@ docs/
   architecture.md
   core.md
   database.md
+  messaging.md
   development.md
 ```
 

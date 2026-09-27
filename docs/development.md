@@ -49,6 +49,16 @@ make vet
 make lint
 make vuln
 make build
+
+# PostgreSQL profile
+make db-up
+make test-integration
+make db-down
+
+# NATS JetStream profile
+make nats-up
+make test-messaging
+make nats-down
 ```
 
 Copy `.env.example` values into your process environment as needed. A `.env` file is intentionally ignored by Git.

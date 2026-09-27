@@ -17,5 +17,20 @@ services:
       # /var/lib/postgresql/data to /var/lib/postgresql.
       - postgres-data:/var/lib/postgresql
 
+  nats:
+    image: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
+    command:
+      - "-js"
+      - "-m"
+      - "8222"
+      - "--store_dir"
+      - "/data"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+
 volumes:
   postgres-data:
+  nats-data:
