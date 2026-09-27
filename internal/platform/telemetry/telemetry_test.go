@@ -224,6 +224,79 @@ func TestMessagingOperationSpans(t *testing.T) {
 	}
 }
 
+func TestObserveHTTPRouteUpdatesServerSpan(t *testing.T) {
+	t.Parallel()
+
+	span := recordHTTPRouteSpan(t, http.MethodGet, "/widgets/{widgetID}")
+	if span.Name() != "GET /widgets/{widgetID}" {
+		t.Fatalf("span name = %q, want %q", span.Name(), "GET /widgets/{widgetID}")
+	}
+	if got, ok := spanStringAttribute(span, "http.route"); !ok || got != "/widgets/{widgetID}" {
+		t.Fatalf("http.route = %q, present=%t", got, ok)
+	}
+}
+
+func TestObserveHTTPRouteUsesHTTPForUnknownMethod(t *testing.T) {
+	t.Parallel()
+
+	span := recordHTTPRouteSpan(t, "BREW", "/widgets/{widgetID}")
+	if span.Name() != "HTTP /widgets/{widgetID}" {
+		t.Fatalf("span name = %q, want %q", span.Name(), "HTTP /widgets/{widgetID}")
+	}
+}
+
+func TestObserveHTTPRouteIgnoresEmptyRoute(t *testing.T) {
+	t.Parallel()
+
+	span := recordHTTPRouteSpan(t, http.MethodGet, "")
+	if span.Name() != "initial" {
+		t.Fatalf("span name = %q, want initial", span.Name())
+	}
+	if got, ok := spanStringAttribute(span, "http.route"); ok {
+		t.Fatalf("unexpected http.route = %q", got)
+	}
+}
+
+func recordHTTPRouteSpan(
+	t *testing.T,
+	method string,
+	route string,
+) sdktrace.ReadOnlySpan {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(recorder),
+	)
+	t.Cleanup(func() {
+		_ = tracerProvider.Shutdown(context.Background())
+	})
+
+	provider := &Provider{tracerProvider: tracerProvider}
+	ctx, span := tracerProvider.Tracer("test").Start(
+		context.Background(),
+		"initial",
+		trace.WithSpanKind(trace.SpanKindServer),
+	)
+	provider.ObserveHTTPRoute(ctx, method, route)
+	span.End()
+
+	ended := recorder.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(ended))
+	}
+	return ended[0]
+}
+
+func spanStringAttribute(span sdktrace.ReadOnlySpan, key string) (string, bool) {
+	for _, attr := range span.Attributes() {
+		if string(attr.Key) == key {
+			return attr.Value.AsString(), true
+		}
+	}
+	return "", false
+}
+
 func testConfig() Config {
 	return Config{
 		Endpoint:                "http://127.0.0.1:4318",
