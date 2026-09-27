@@ -9,8 +9,8 @@ func TestTelemetryDisabledIgnoresInvalidSettings(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"TELEMETRY_ENABLED":           "false",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "not a url",
+		"TELEMETRY_ENABLED":            "false",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":  "not a url",
 		"TELEMETRY_TRACE_SAMPLE_RATIO": "invalid",
 	}
 	cfg, err := loadTelemetry(func(key string) (string, bool) {
@@ -29,19 +29,19 @@ func TestTelemetryEnabledLoadsBoundedSettings(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"TELEMETRY_ENABLED":                       "true",
-		"OTEL_EXPORTER_OTLP_ENDPOINT":             "https://collector.example.com/otel",
-		"TELEMETRY_EXPORT_TIMEOUT":                "3s",
-		"TELEMETRY_RETRY_INITIAL_INTERVAL":        "250ms",
+		"TELEMETRY_ENABLED":                     "true",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":           "https://collector.example.com/otel",
+		"TELEMETRY_EXPORT_TIMEOUT":              "3s",
+		"TELEMETRY_RETRY_INITIAL_INTERVAL":      "250ms",
 		"TELEMETRY_RETRY_MAX_INTERVAL":            "1s",
 		"TELEMETRY_RETRY_MAX_ELAPSED_TIME":        "5s",
-		"TELEMETRY_METRIC_INTERVAL":               "20s",
-		"TELEMETRY_TRACE_SAMPLE_RATIO":            "0.25",
-		"TELEMETRY_TRACE_MAX_QUEUE_SIZE":          "1024",
-		"TELEMETRY_TRACE_MAX_EXPORT_BATCH_SIZE":   "256",
-		"TELEMETRY_TRACE_BATCH_TIMEOUT":           "2s",
-		"TELEMETRY_MAX_EXPORT_REQUEST_BYTES":      "2097152",
-		"TELEMETRY_SHUTDOWN_TIMEOUT":              "7s",
+		"TELEMETRY_METRIC_INTERVAL":             "20s",
+		"TELEMETRY_TRACE_SAMPLE_RATIO":          "0.25",
+		"TELEMETRY_TRACE_MAX_QUEUE_SIZE":        "1024",
+		"TELEMETRY_TRACE_MAX_EXPORT_BATCH_SIZE": "256",
+		"TELEMETRY_TRACE_BATCH_TIMEOUT":         "2s",
+		"TELEMETRY_MAX_EXPORT_REQUEST_BYTES":    "2097152",
+		"TELEMETRY_SHUTDOWN_TIMEOUT":            "7s",
 	}
 	cfg, err := loadTelemetry(func(key string) (string, bool) {
 		value, ok := values[key]
