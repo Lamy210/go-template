@@ -35,6 +35,9 @@ logs.
 
 ## Local PostgreSQL
 
+PostgreSQL 18+ moved its official image volume to `/var/lib/postgresql`.
+The Compose file uses that path and pins the same image digest used by CI.
+
 ```bash
 make db-up
 export DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
@@ -98,6 +101,17 @@ history to a fresh PostgreSQL database, Atlas runs `schema diff` against
 remaining SQL plan is treated as drift and fails the build.
 
 This keeps the sqlc schema input and migration history from silently diverging.
+
+## Integration tests
+
+`make test-integration` uses the existing `DATABASE_URL` when it is set.
+When it is unset, the test package starts a pinned PostgreSQL 18.6 container
+with Testcontainers for Go v0.44.0 and applies the example migration as a
+container init script.
+
+CI runs both paths: the externally managed fresh database path validates Atlas
+migration and schema drift, while a separate smoke test clears `DATABASE_URL`
+and verifies the Testcontainers fallback itself.
 
 ## Transactions
 
