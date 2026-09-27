@@ -102,7 +102,7 @@ high-cardinality values.
 
 Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
 
-Shutdown order is HTTP first, NATS second when enabled, and telemetry last so completed work can be flushed before process exit.
+Shutdown order is HTTP first, NATS second when enabled, and telemetry last so completed work can be flushed before process exit. HTTP shutdown first attempts graceful drain within `HTTP_SHUTDOWN_TIMEOUT`; if that context expires, the adapter force-closes active HTTP connections before dependency teardown continues.
 
 See [telemetry.md](telemetry.md).
 

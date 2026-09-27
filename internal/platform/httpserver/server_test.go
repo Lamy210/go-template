@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -128,6 +129,91 @@ func TestOpenAPIEndpoint(t *testing.T) {
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("GET /openapi.json status = %d, want %d; body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+}
+
+func TestShutdownForceClosesActiveConnectionsAfterDeadline(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+	})
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		select {
+		case <-r.Context().Done():
+			close(requestCanceled)
+		case <-release:
+		}
+	})
+
+	server := &Server{
+		handler: handler,
+		httpServer: &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: time.Second,
+			ReadTimeout:       time.Second,
+			WriteTimeout:      time.Second,
+			IdleTimeout:       time.Second,
+		},
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- server.httpServer.Serve(listener)
+	}()
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	clientErr := make(chan error, 1)
+	go func() {
+		resp, err := client.Get("http://" + listener.Addr().String())
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		clientErr <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("request handler did not start")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err = server.Shutdown(shutdownCtx)
+	cancel()
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Shutdown() error = %v, want deadline exceeded", err)
+	}
+
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("active request context was not canceled by force close")
+	}
+
+	select {
+	case err := <-serveErr:
+		if !errors.Is(err, http.ErrServerClosed) {
+			t.Fatalf("Serve() error = %v, want http.ErrServerClosed", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("HTTP server did not stop")
+	}
+
+	select {
+	case <-clientErr:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP client did not observe connection shutdown")
 	}
 }
 

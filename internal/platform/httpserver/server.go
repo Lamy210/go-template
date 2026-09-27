@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -128,9 +129,22 @@ func (s *Server) ListenAndServe() error {
 	return s.httpServer.ListenAndServe()
 }
 
-// Shutdown gracefully drains in-flight HTTP requests.
+// Shutdown gracefully drains in-flight HTTP requests until ctx expires. If the
+// graceful deadline is exceeded or canceled, it force-closes active HTTP
+// connections before returning so dependency teardown cannot race indefinitely
+// with still-connected request handlers.
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.httpServer.Shutdown(ctx)
+	err := s.httpServer.Shutdown(ctx)
+	if err == nil {
+		return nil
+	}
+
+	ctxErr := ctx.Err()
+	if ctxErr == nil || !errors.Is(err, ctxErr) {
+		return err
+	}
+
+	return errors.Join(err, s.httpServer.Close())
 }
 
 func accessLog(
