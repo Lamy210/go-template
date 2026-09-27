@@ -55,3 +55,29 @@ func TestNilErrorAccessorsAreSafe(t *testing.T) {
 		t.Fatalf("nil Error.Error() = %q", err.Error())
 	}
 }
+
+func TestKindValid(t *testing.T) {
+	t.Parallel()
+
+	known := []Kind{
+		KindInternal,
+		KindInvalidArgument,
+		KindUnauthenticated,
+		KindPermissionDenied,
+		KindNotFound,
+		KindConflict,
+		KindResourceExhausted,
+		KindUnavailable,
+	}
+	for _, kind := range known {
+		if !kind.Valid() {
+			t.Fatalf("Kind(%q).Valid() = false, want true", kind)
+		}
+	}
+
+	for _, kind := range []Kind{"", "future_kind"} {
+		if kind.Valid() {
+			t.Fatalf("Kind(%q).Valid() = true, want false", kind)
+		}
+	}
+}

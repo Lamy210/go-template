@@ -74,3 +74,44 @@ func TestToHTTPErrorHidesUnknownError(t *testing.T) {
 		t.Fatalf("response exposed internal error: %q", response.Error())
 	}
 }
+
+func TestToHTTPErrorHidesUnmappedApplicationKind(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sensitiveCode    = "future_internal_code"
+		sensitiveMessage = "future internal diagnostic"
+		sensitiveDetail  = "future internal detail"
+	)
+	err := apperror.New(
+		apperror.Kind("future_kind"),
+		sensitiveCode,
+		sensitiveMessage,
+		apperror.Detail{
+			Field:   "internal",
+			Code:    sensitiveCode,
+			Message: sensitiveDetail,
+		},
+	)
+
+	mapped := toHTTPError(context.Background(), err)
+	response := mapped.(*errorResponse)
+
+	if response.GetStatus() != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.GetStatus(), http.StatusInternalServerError)
+	}
+	if response.Code != internalErrorCode {
+		t.Fatalf("code = %q, want %q", response.Code, internalErrorCode)
+	}
+	if response.Message != "internal server error" {
+		t.Fatalf("message = %q, want generic internal message", response.Message)
+	}
+	if len(response.Details) != 0 {
+		t.Fatalf("details = %#v, want none", response.Details)
+	}
+	for _, sensitive := range []string{sensitiveCode, sensitiveMessage, sensitiveDetail} {
+		if strings.Contains(response.Error(), sensitive) {
+			t.Fatalf("response exposed unmapped application value %q", sensitive)
+		}
+	}
+}
