@@ -78,6 +78,17 @@ func Open(cfg ClientConfig) (*Client, error) {
 	}, nil
 }
 
+// Close immediately closes the NATS connection.
+//
+// Callers should prefer Drain during a normal shutdown and keep Close as a
+// fail-safe for startup failures or abnormal exits.
+func (c *Client) Close() {
+	if c == nil || c.conn == nil {
+		return
+	}
+	c.conn.Close()
+}
+
 // Publish publishes synchronously and uses msgID for JetStream deduplication
 // when it is non-empty.
 func (c *Client) Publish(
