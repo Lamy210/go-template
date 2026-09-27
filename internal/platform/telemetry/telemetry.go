@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -55,6 +56,8 @@ type Provider struct {
 	shutdownOnce sync.Once
 	shutdownErr  error
 }
+
+var _ coreprop.TextMapPropagator = (*Provider)(nil)
 
 // Open builds OTLP/HTTP trace and metric pipelines without requiring the
 // collector to be reachable during service startup.
@@ -219,6 +222,16 @@ func (p *Provider) HTTPMiddleware(operation string) func(http.Handler) http.Hand
 		otelhttp.WithMeterProvider(p.meterProvider),
 		otelhttp.WithPropagators(p.propagator),
 	)
+}
+
+// Inject writes the active cross-process context into a transport-neutral carrier.
+func (p *Provider) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) {
+	p.propagator.Inject(ctx, carrier)
+}
+
+// Extract restores cross-process context from a transport-neutral carrier.
+func (p *Provider) Extract(ctx context.Context, carrier coreprop.TextMapCarrier) context.Context {
+	return p.propagator.Extract(ctx, carrier)
 }
 
 // LogAttrs exposes correlation identifiers from the active span without coupling callers
