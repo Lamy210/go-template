@@ -80,10 +80,10 @@ func New(
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
-	// Keep the access logger outside Recoverer so recovered panics are recorded
-	// as completed 500 responses rather than skipping the post-handler log.
+	// Keep the access logger outside panic recovery so recovered panics are
+	// recorded as completed 500 responses rather than skipping the post-handler log.
 	router.Use(accessLog(logger, options.contextLogAttrs, options.routeObserver))
-	router.Use(middleware.Recoverer)
+	router.Use(safeRecoverer(logger))
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
 	api := humachi.New(router, newAPIConfig())
