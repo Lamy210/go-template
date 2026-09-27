@@ -44,9 +44,10 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 
 - Core/HTTP: config, logging, error semantics, lifecycle, Huma/chi transport.
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
-- Future messaging/telemetry profiles should follow the same rule.
+- Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
+- Future telemetry profiles should follow the same rule.
 
-A profile must be removable without forcing unrelated application code to understand it. PostgreSQL therefore defaults to disabled, and the example sqlc package is not imported by the running application.
+A profile must be removable without forcing unrelated application code to understand it. PostgreSQL and NATS therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
 ## PostgreSQL boundaries
 
@@ -62,6 +63,14 @@ The desired SQL schema and versioned migration history are both checked in CI:
 
 See [database.md](database.md).
 
+## Messaging boundaries
+
+The application composition root owns the NATS connection lifecycle and combines NATS readiness with other enabled dependencies. The messaging adapter owns connection bounds, JetStream stream policy, synchronous deduplicated publishing, and durable pull-consumer mechanics.
+
+Business handlers do not live in `internal/platform/messaging`. A feature owns its subject/filter/durable policy and passes its handler to the platform consumer. Normal shutdown drains buffered consumer work and then drains the NATS connection; both paths are bounded.
+
+See [messaging.md](messaging.md).
+
 ## Current bootstrap
 
 The current increments provide:
@@ -76,7 +85,8 @@ The current increments provide:
 - Huma OpenAPI 3.1 generation on top of chi;
 - liveness/readiness probes;
 - optional PostgreSQL with pgx/sqlc/Atlas;
-- unit, transport, and database integration tests;
+- optional NATS JetStream with bounded retry/quarantine and readiness;
+- unit, transport, database/Testcontainers, and messaging integration tests;
 - Docker and CI quality gates.
 
-Messaging and telemetry remain uncoupled optional profiles.
+Telemetry remains an uncoupled future optional profile.
