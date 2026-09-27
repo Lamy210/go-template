@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 	otelprop "go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -221,6 +222,57 @@ func TestMessagingOperationSpans(t *testing.T) {
 				t.Fatalf("span events = %#v, want none so raw error text is not recorded", span.Events())
 			}
 		})
+	}
+}
+
+func TestHTTPMiddlewareRouteObserverUpdatesActiveSpan(t *testing.T) {
+	t.Parallel()
+
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(recorder),
+	)
+	meterProvider := sdkmetric.NewMeterProvider()
+	t.Cleanup(func() {
+		_ = meterProvider.Shutdown(context.Background())
+		_ = tracerProvider.Shutdown(context.Background())
+	})
+
+	provider := &Provider{
+		tracerProvider: tracerProvider,
+		meterProvider:  meterProvider,
+		propagator:     otelprop.TraceContext{},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /widgets/{widgetID}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	routeAware := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(w, r)
+		provider.ObserveHTTPRoute(r.Context(), r.Method, r.Pattern)
+	})
+	handler := provider.HTTPMiddleware("test-service")(routeAware)
+
+	req := httptest.NewRequest(http.MethodGet, "/widgets/12345", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+
+	ended := recorder.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("ended spans = %d, want 1", len(ended))
+	}
+	span := ended[0]
+	if span.Name() != "GET GET /widgets/{widgetID}" {
+		t.Fatalf("span name = %q, want %q", span.Name(), "GET GET /widgets/{widgetID}")
+	}
+	if got, ok := spanStringAttribute(span, "http.route"); !ok || got != "GET /widgets/{widgetID}" {
+		t.Fatalf("http.route = %q, present=%t", got, ok)
 	}
 }
 
