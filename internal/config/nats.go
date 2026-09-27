@@ -25,7 +25,7 @@ const (
 	defaultNATSDurable            = "app-worker"
 	defaultNATSFilterSubject      = "app.events.work"
 	defaultNATSQuarantineSubject  = "app.events.quarantine"
-	defaultNATSAckWait            = 30 * time.Second
+	defaultNATSAckWait            = 40 * time.Second
 	defaultNATSProcessAttempts    = 3
 	defaultNATSQuarantineAttempts = 2
 	defaultNATSMaxAckPending      = 128
@@ -254,6 +254,10 @@ func (c NATSConfig) Validate() error {
 	}
 	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 || c.PullExpiry <= 0 {
 		return fmt.Errorf("NATS worker timeouts must be positive")
+	}
+	if c.HandlerTimeout >= c.AckWait ||
+		c.AckTimeout >= c.AckWait-c.HandlerTimeout {
+		return fmt.Errorf("NATS_ACK_WAIT must exceed NATS_HANDLER_TIMEOUT + NATS_ACK_TIMEOUT")
 	}
 	return nil
 }
