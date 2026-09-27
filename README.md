@@ -96,7 +96,7 @@ make dev
 
 The profile exports to `/v1/traces` and `/v1/metrics`, propagates W3C Trace Context/Baggage, and instruments inbound HTTP. HTTP server spans are normalized with matched chi route templates rather than raw URL paths. Collector availability is intentionally not part of `/health/ready`; telemetry failures must not evict an otherwise healthy service.
 
-OpenTelemetry logging is not enabled in this profile. Structured application logs remain on `log/slog`; HTTP access logs include the active `trace_id` and `span_id` when telemetry is enabled.
+OpenTelemetry logging is not enabled in this profile. Structured application logs remain on `log/slog`; HTTP access logs include the active `trace_id` and `span_id` when telemetry is enabled. Access logs use matched chi route templates (or `<unmatched>`) rather than raw URL paths.
 
 See [docs/telemetry.md](docs/telemetry.md).
 
