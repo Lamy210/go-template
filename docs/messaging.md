@@ -70,6 +70,11 @@ than copying arbitrary source headers.
 When telemetry is disabled, no propagator is installed and messaging behavior is
 otherwise unchanged.
 
+Propagation headers are part of the persisted message metadata. Do not put
+credentials, access tokens, personal data, or unbounded/high-cardinality values
+in OpenTelemetry Baggage. Treat Baggage as broker-visible metadata and keep it
+small enough for normal NATS header limits and operational inspection.
+
 ## Retry and quarantine
 
 `RunConsumer` separates normal processing attempts from quarantine attempts.
