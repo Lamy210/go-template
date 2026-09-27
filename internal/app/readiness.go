@@ -6,10 +6,6 @@ import (
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 )
 
-type readinessResult struct {
-	err error
-}
-
 // combineReadiness combines enabled dependency checks at the composition root.
 // It returns nil when the service has no required readiness dependencies.
 //
@@ -31,21 +27,20 @@ func combineReadiness(checks ...httpserver.ReadinessCheck) httpserver.ReadinessC
 		checkCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		results := make(chan readinessResult, len(active))
+		results := make(chan error, len(active))
 		for _, check := range active {
-			check := check
-			go func() {
-				results <- readinessResult{err: check(checkCtx)}
-			}()
+			go func(check httpserver.ReadinessCheck) {
+				results <- check(checkCtx)
+			}(check)
 		}
 
 		var firstErr error
 		for range active {
-			result := <-results
-			if result.err == nil || firstErr != nil {
+			err := <-results
+			if err == nil || firstErr != nil {
 				continue
 			}
-			firstErr = result.err
+			firstErr = err
 			cancel()
 		}
 		return firstErr
