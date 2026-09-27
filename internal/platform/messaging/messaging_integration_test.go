@@ -14,25 +14,71 @@ import (
 	"github.com/Lamy210/go-template/internal/platform/messaging"
 )
 
-const testCorrelationHeader = "X-Test-Correlation"
+const (
+	testCorrelationHeader = "X-Test-Correlation"
+	testTraceHeader       = "X-Test-Trace-Operation"
+)
 
 type testPropagationKey struct{}
+type testTraceOperationKey struct{}
 
 type testPropagator struct{}
 
 func (testPropagator) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) {
-	value, _ := ctx.Value(testPropagationKey{}).(string)
-	if value != "" {
+	if value, _ := ctx.Value(testPropagationKey{}).(string); value != "" {
 		carrier.Set(testCorrelationHeader, value)
+	}
+	if value, _ := ctx.Value(testTraceOperationKey{}).(string); value != "" {
+		carrier.Set(testTraceHeader, value)
 	}
 }
 
 func (testPropagator) Extract(ctx context.Context, carrier coreprop.TextMapCarrier) context.Context {
-	value := carrier.Get(testCorrelationHeader)
-	if value == "" {
-		return ctx
+	if value := carrier.Get(testCorrelationHeader); value != "" {
+		ctx = context.WithValue(ctx, testPropagationKey{}, value)
 	}
-	return context.WithValue(ctx, testPropagationKey{}, value)
+	if value := carrier.Get(testTraceHeader); value != "" {
+		ctx = context.WithValue(ctx, testTraceOperationKey{}, value)
+	}
+	return ctx
+}
+
+type testTracer struct {
+	publishStarted atomic.Int32
+	publishEnded   atomic.Int32
+	processStarted atomic.Int32
+	processEnded   atomic.Int32
+}
+
+func (t *testTracer) StartPublish(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	t.publishStarted.Add(1)
+	ctx = context.WithValue(
+		ctx,
+		testTraceOperationKey{},
+		"publish:"+destination,
+	)
+	return ctx, func(error) {
+		t.publishEnded.Add(1)
+	}
+}
+
+func (t *testTracer) StartProcess(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	t.processStarted.Add(1)
+	parent, _ := ctx.Value(testTraceOperationKey{}).(string)
+	ctx = context.WithValue(
+		ctx,
+		testTraceOperationKey{},
+		"process:"+destination+" parent="+parent,
+	)
+	return ctx, func(error) {
+		t.processEnded.Add(1)
+	}
 }
 
 func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
@@ -41,6 +87,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		t.Fatal("NATS_URL is required")
 	}
 
+	tracer := &testTracer{}
 	client, err := messaging.Open(messaging.ClientConfig{
 		URL:            natsURL,
 		Name:           "go-template-integration",
@@ -49,7 +96,10 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		MaxReconnects:  5,
 		DrainTimeout:   3 * time.Second,
 		RequestTimeout: 2 * time.Second,
-	}, messaging.WithPropagator(testPropagator{}))
+	},
+		messaging.WithPropagator(testPropagator{}),
+		messaging.WithTracer(tracer),
+	)
 	if err != nil {
 		t.Fatalf("open nats client: %v", err)
 	}
@@ -140,6 +190,61 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("propagation consumer did not drain")
+		}
+	})
+
+	t.Run("traces publish and handler with propagated operation context", func(t *testing.T) {
+		const subject = "template.events.telemetry"
+		observed := make(chan string, 1)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+
+		go func() {
+			errCh <- client.RunConsumer(
+				consumerCtx,
+				workerConfig(stream, "telemetry-worker", subject),
+				func(handlerCtx context.Context, _ messaging.Message) error {
+					value, _ := handlerCtx.Value(testTraceOperationKey{}).(string)
+					observed <- value
+					return nil
+				},
+			)
+		}()
+
+		if _, err := client.Publish(
+			ctx,
+			subject,
+			"telemetry-1",
+			[]byte("telemetry"),
+		); err != nil {
+			t.Fatalf("publish telemetry message: %v", err)
+		}
+
+		select {
+		case got := <-observed:
+			want := "process:" + subject + " parent=publish:" + subject
+			if got != want {
+				t.Fatalf("handler trace operation = %q, want %q", got, want)
+			}
+		case <-time.After(8 * time.Second):
+			t.Fatal("timed out waiting for traced handler")
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("telemetry consumer shutdown: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("telemetry consumer did not drain")
+		}
+
+		if tracer.publishStarted.Load() == 0 || tracer.publishEnded.Load() == 0 {
+			t.Fatal("publish tracer lifecycle was not invoked")
+		}
+		if tracer.processStarted.Load() == 0 || tracer.processEnded.Load() == 0 {
+			t.Fatal("process tracer lifecycle was not invoked")
 		}
 	})
 
