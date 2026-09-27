@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -123,6 +124,26 @@ func transformHumaError(ctx huma.Context, statusText string, value any) (any, er
 		message,
 		details,
 	), nil
+}
+
+func writeInternalErrorResponse(w http.ResponseWriter, r *http.Request) {
+	response := newErrorResponse(
+		r.Context(),
+		http.StatusInternalServerError,
+		internalErrorCode,
+		"internal server error",
+		nil,
+	)
+
+	body, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 func newErrorResponse(
