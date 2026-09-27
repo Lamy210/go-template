@@ -24,8 +24,8 @@ DATABASE_ENABLED=true
 DATABASE_URL=postgres://...
 ```
 
-Pool size, connection lifetime, health period, connect timeout, and readiness
-timeout are separately configurable in `.env.example`.
+Pool size, connection lifetime, health period, connect timeout, readiness
+timeout, and shutdown timeout are separately configurable in `.env.example`.
 
 Configuration is validated at two boundaries: the environment-facing config
 layer and the PostgreSQL adapter itself. The adapter independently rejects an
@@ -124,7 +124,17 @@ When the profile is enabled:
 2. `/health/ready` performs a bounded ping using
    `DATABASE_HEALTH_TIMEOUT`;
 3. HTTP drains first on shutdown;
-4. the pool closes as application composition unwinds.
+4. NATS drains next when enabled, so messaging handlers can finish DB work;
+5. PostgreSQL close starts and is awaited for at most
+   `DATABASE_SHUTDOWN_TIMEOUT`;
+6. telemetry shuts down last so completed work can still be exported.
+
+`pgxpool.Close` has no context-aware variant and can wait for acquired
+connections to be returned. The adapter therefore runs the underlying close in a
+goroutine and returns a sanitized timeout error when the shutdown context
+expires. The pgx close continues in that goroutine so a later connection
+release can still finish resource destruction, but process shutdown is no
+longer blocked indefinitely.
 
 A database error can make readiness fail, but its raw dependency text is not
 returned to HTTP clients.

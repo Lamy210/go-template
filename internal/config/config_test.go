@@ -38,18 +38,19 @@ func TestLoadOverrides(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"SERVICE_NAME":             "example-api",
-		"APP_ENV":                  "production",
-		"HTTP_ADDR":                "127.0.0.1:9090",
-		"LOG_LEVEL":                "debug",
-		"HTTP_SHUTDOWN_TIMEOUT":    "3s",
-		"HTTP_MAX_HEADER_BYTES":    "2048",
-		"HTTP_MAX_BODY_BYTES":      "4096",
-		"HTTP_READ_HEADER_TIMEOUT": "2s",
-		"DATABASE_ENABLED":         "true",
-		"DATABASE_URL":             "postgres://example.invalid/app",
-		"DATABASE_MAX_CONNS":       "20",
-		"DATABASE_MIN_CONNS":       "2",
+		"SERVICE_NAME":              "example-api",
+		"APP_ENV":                   "production",
+		"HTTP_ADDR":                 "127.0.0.1:9090",
+		"LOG_LEVEL":                 "debug",
+		"HTTP_SHUTDOWN_TIMEOUT":     "3s",
+		"HTTP_MAX_HEADER_BYTES":     "2048",
+		"HTTP_MAX_BODY_BYTES":       "4096",
+		"HTTP_READ_HEADER_TIMEOUT":  "2s",
+		"DATABASE_ENABLED":          "true",
+		"DATABASE_URL":              "postgres://example.invalid/app",
+		"DATABASE_MAX_CONNS":        "20",
+		"DATABASE_MIN_CONNS":        "2",
+		"DATABASE_SHUTDOWN_TIMEOUT": "7s",
 	}
 
 	cfg, err := load(func(key string) (string, bool) {
@@ -81,6 +82,12 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.Database.MaxConns != 20 || cfg.Database.MinConns != 2 {
 		t.Fatalf("database pool = min:%d max:%d, want min:2 max:20", cfg.Database.MinConns, cfg.Database.MaxConns)
 	}
+	if cfg.Database.ShutdownTimeout != 7*time.Second {
+		t.Fatalf(
+			"Database.ShutdownTimeout = %s, want 7s",
+			cfg.Database.ShutdownTimeout,
+		)
+	}
 }
 
 func TestLoadRejectsInvalidDuration(t *testing.T) {
@@ -102,9 +109,10 @@ func TestDisabledDatabaseIgnoresDatabaseSpecificValues(t *testing.T) {
 
 	cfg, err := load(func(key string) (string, bool) {
 		values := map[string]string{
-			"DATABASE_ENABLED":   "false",
-			"DATABASE_MAX_CONNS": "not-an-integer",
-			"DATABASE_URL":       "not-a-postgres-url",
+			"DATABASE_ENABLED":          "false",
+			"DATABASE_MAX_CONNS":        "not-an-integer",
+			"DATABASE_URL":              "not-a-postgres-url",
+			"DATABASE_SHUTDOWN_TIMEOUT": "not-a-duration",
 		}
 		value, ok := values[key]
 		return value, ok
@@ -188,6 +196,26 @@ func TestLoadRejectsEnabledDatabaseWithoutURL(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Fatalf("load error = %v, want DATABASE_URL validation error", err)
+	}
+}
+
+func TestLoadRejectsNonPositiveDatabaseShutdownTimeout(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"DATABASE_ENABLED":          "true",
+			"DATABASE_URL":              "postgres://example.invalid/app",
+			"DATABASE_SHUTDOWN_TIMEOUT": "0s",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil || !strings.Contains(err.Error(), "DATABASE_SHUTDOWN_TIMEOUT") {
+		t.Fatalf(
+			"load error = %v, want DATABASE_SHUTDOWN_TIMEOUT validation error",
+			err,
+		)
 	}
 }
 

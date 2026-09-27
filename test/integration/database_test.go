@@ -54,6 +54,33 @@ func TestTransactionRollbackPreservesCause(t *testing.T) {
 	}
 }
 
+func TestDatabaseCloseHonorsDeadlineWithAcquiredConnection(t *testing.T) {
+	pool, ctx := openTestPool(t)
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire postgres connection: %v", err)
+	}
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err = database.Close(closeCtx, pool)
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		conn.Release()
+		t.Fatalf("database.Close() error = %v, want deadline exceeded", err)
+	}
+
+	conn.Release()
+
+	deadline := time.Now().Add(time.Second)
+	for pool.Stat().TotalConns() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := pool.Stat().TotalConns(); got != 0 {
+		t.Fatalf("pool total connections after release = %d, want 0", got)
+	}
+}
+
 func TestDatabaseReadinessCheck(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
