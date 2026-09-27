@@ -12,6 +12,8 @@ An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bo
 
 An optional NATS JetStream profile adds bounded connection/reconnect policy, explicit stream limits, message-ID deduplication, durable pull consumers, finite retry/quarantine behavior, dependency readiness, and graceful drain. It is also disabled by default.
 
+An optional OpenTelemetry profile exports stable traces and metrics over OTLP/HTTP with bounded buffering, retry, export, and shutdown behavior. It is disabled by default and is deliberately non-critical to readiness.
+
 ## Requirements
 
 - Go 1.27.x
@@ -49,7 +51,7 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 `SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`.
 
-`DATABASE_ENABLED=false` and `NATS_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
+`DATABASE_ENABLED=false`, `NATS_ENABLED=false`, and `TELEMETRY_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
 
@@ -81,6 +83,22 @@ make nats-down
 The application opens NATS and reconciles the configured stream only when `NATS_ENABLED=true`. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker.
 
 See [docs/messaging.md](docs/messaging.md).
+
+## OpenTelemetry profile
+
+Enable OTLP traces and metrics with a collector or compatible backend:
+
+```bash
+export TELEMETRY_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT='http://127.0.0.1:4318'
+make dev
+```
+
+The profile exports to `/v1/traces` and `/v1/metrics`, propagates W3C Trace Context/Baggage, and instruments inbound HTTP. Collector availability is intentionally not part of `/health/ready`; telemetry failures must not evict an otherwise healthy service.
+
+OpenTelemetry logging is not enabled in this profile. Structured application logs remain on `log/slog`.
+
+See [docs/telemetry.md](docs/telemetry.md).
 
 ## Build metadata
 
@@ -124,6 +142,7 @@ internal/
     database/              PostgreSQL pool/readiness/transaction boundary
     httpserver/            HTTP transport
     messaging/             NATS JetStream client/stream/consumer boundary
+    telemetry/             OpenTelemetry traces/metrics boundary
 migrations/                versioned Atlas migrations + atlas.sum
 sql/
   schema/                  desired SQL schema
@@ -135,6 +154,7 @@ docs/
   core.md
   database.md
   messaging.md
+  telemetry.md
   development.md
 ```
 
