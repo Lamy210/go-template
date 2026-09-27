@@ -150,7 +150,7 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	if int(metadata.NumDelivered) > cfg.ProcessAttempts {
+	if metadata.NumDelivered > uint64(cfg.ProcessAttempts) {
 		c.quarantine(parent, cfg, msg, metadata, reportFatal)
 		return
 	}
@@ -170,7 +170,7 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	if int(metadata.NumDelivered) < cfg.ProcessAttempts {
+	if metadata.NumDelivered < uint64(cfg.ProcessAttempts) {
 		if err := msg.NakWithDelay(cfg.RetryDelay); err != nil {
 			reportFatal(newOperationError("schedule jetstream retry", err))
 		}
@@ -199,8 +199,8 @@ func (c *Client) quarantine(
 
 	msgID := fmt.Sprintf("quarantine:%s:%d", metadata.Stream, metadata.Sequence.Stream)
 	if _, err := c.js.PublishMsg(quarantineCtx, out, jetstream.WithMsgID(msgID)); err != nil {
-		totalAttempts := cfg.ProcessAttempts + cfg.QuarantineAttempts
-		if int(metadata.NumDelivered) < totalAttempts {
+		totalAttempts := uint64(cfg.ProcessAttempts) + uint64(cfg.QuarantineAttempts)
+		if metadata.NumDelivered < totalAttempts {
 			if nakErr := msg.NakWithDelay(cfg.RetryDelay); nakErr != nil {
 				reportFatal(newOperationError("schedule quarantine retry", nakErr))
 			}
