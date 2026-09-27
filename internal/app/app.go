@@ -13,6 +13,7 @@ import (
 	"github.com/Lamy210/go-template/internal/config"
 	"github.com/Lamy210/go-template/internal/platform/database"
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
+	"github.com/Lamy210/go-template/internal/platform/messaging"
 )
 
 // Run loads configuration, initializes dependencies, starts the HTTP server,
@@ -36,7 +37,8 @@ func Run(ctx context.Context) error {
 		BuildTime: info.BuildDate,
 	}
 
-	var ready httpserver.ReadinessCheck
+	var readinessChecks []httpserver.ReadinessCheck
+
 	if cfg.Database.Enabled {
 		pool, err := database.Open(ctx, database.Config{
 			URL:               cfg.Database.URL,
@@ -52,14 +54,61 @@ func Run(ctx context.Context) error {
 		}
 		defer pool.Close()
 
-		ready = httpserver.ReadinessCheck(database.ReadinessCheck(pool, cfg.Database.HealthTimeout))
+		readinessChecks = append(
+			readinessChecks,
+			httpserver.ReadinessCheck(database.ReadinessCheck(pool, cfg.Database.HealthTimeout)),
+		)
 		logger.Info("postgres connection pool ready",
 			"max_conns", cfg.Database.MaxConns,
 			"min_conns", cfg.Database.MinConns,
 		)
 	}
 
-	server := httpserver.New(cfg.HTTP, logger, serviceInfo, ready)
+	var natsClient *messaging.Client
+	if cfg.NATS.Enabled {
+		natsClient, err = messaging.Open(messaging.ClientConfig{
+			URL:            cfg.NATS.URL,
+			Name:           cfg.ServiceName,
+			ConnectTimeout: cfg.NATS.ConnectTimeout,
+			ReconnectWait:  cfg.NATS.ReconnectWait,
+			MaxReconnects:  cfg.NATS.MaxReconnects,
+			DrainTimeout:   cfg.NATS.DrainTimeout,
+			RequestTimeout: cfg.NATS.RequestTimeout,
+		})
+		if err != nil {
+			return fmt.Errorf("initialize nats: %w", err)
+		}
+		defer natsClient.Close()
+
+		if err := natsClient.EnsureStream(ctx, messaging.StreamConfig{
+			Name:            cfg.NATS.Stream,
+			Subjects:        cfg.NATS.Subjects,
+			MaxConsumers:    cfg.NATS.MaxConsumers,
+			MaxMessages:     cfg.NATS.MaxMessages,
+			MaxBytes:        cfg.NATS.MaxBytes,
+			MaxAge:          cfg.NATS.MaxAge,
+			MaxMessageSize:  cfg.NATS.MaxMessageSize,
+			DuplicateWindow: cfg.NATS.DuplicateWindow,
+		}); err != nil {
+			return fmt.Errorf("initialize jetstream stream: %w", err)
+		}
+
+		readinessChecks = append(
+			readinessChecks,
+			httpserver.ReadinessCheck(natsClient.ReadinessCheck(cfg.NATS.RequestTimeout)),
+		)
+		logger.Info("nats jetstream ready",
+			"stream", cfg.NATS.Stream,
+			"max_reconnects", cfg.NATS.MaxReconnects,
+		)
+	}
+
+	server := httpserver.New(
+		cfg.HTTP,
+		logger,
+		serviceInfo,
+		combineReadiness(readinessChecks...),
+	)
 	errCh := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -80,11 +129,24 @@ func Run(ctx context.Context) error {
 		logger.Info("shutdown requested")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
-	defer cancel()
+	var shutdownErr error
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown http server: %w", err)
+	httpShutdownCtx, cancelHTTP := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
+	if err := server.Shutdown(httpShutdownCtx); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown http server: %w", err))
+	}
+	cancelHTTP()
+
+	if natsClient != nil {
+		natsDrainCtx, cancelNATS := context.WithTimeout(context.Background(), cfg.NATS.DrainTimeout)
+		if err := natsClient.Drain(natsDrainCtx); err != nil {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("drain nats: %w", err))
+		}
+		cancelNATS()
+	}
+
+	if shutdownErr != nil {
+		return shutdownErr
 	}
 
 	logger.Info("shutdown complete")
