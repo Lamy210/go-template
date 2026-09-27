@@ -59,6 +59,9 @@ Business/application code should return either:
 - a wrapped Go error with useful internal context when no semantic mapping is required yet.
 
 Transport adapters translate application errors into their protocol-specific representation.
+They also own protocol-specific panic containment. The HTTP adapter must not
+emit raw panic values or stack traces; the messaging adapter converts feature
+handler panics into a generic bounded-processing failure.
 
 Do not:
 
