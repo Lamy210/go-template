@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -38,16 +39,28 @@ func (c ClientConfig) Validate() error {
 	return nil
 }
 
+// Option configures optional messaging integrations without changing the
+// bounded connection policy in ClientConfig.
+type Option func(*Client)
+
+// WithPropagator enables transport-neutral context injection/extraction.
+func WithPropagator(propagator coreprop.TextMapPropagator) Option {
+	return func(client *Client) {
+		client.propagator = propagator
+	}
+}
+
 // Client owns a NATS connection and the modern JetStream API.
 type Client struct {
 	conn           *nats.Conn
 	js             jetstream.JetStream
 	requestTimeout time.Duration
+	propagator     coreprop.TextMapPropagator
 }
 
 // Open connects to NATS without retrying the initial startup connection.
 // Subsequent reconnect attempts are bounded by MaxReconnects.
-func Open(cfg ClientConfig) (*Client, error) {
+func Open(cfg ClientConfig, options ...Option) (*Client, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -71,11 +84,17 @@ func Open(cfg ClientConfig) (*Client, error) {
 		return nil, newOperationError("create jetstream client", err)
 	}
 
-	return &Client{
+	client := &Client{
 		conn:           conn,
 		js:             js,
 		requestTimeout: cfg.RequestTimeout,
-	}, nil
+	}
+	for _, option := range options {
+		if option != nil {
+			option(client)
+		}
+	}
+	return client, nil
 }
 
 // Close immediately closes the NATS connection.
@@ -100,15 +119,17 @@ func (c *Client) Publish(
 	publishCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	var (
-		ack *jetstream.PubAck
-		err error
-	)
-	if msgID == "" {
-		ack, err = c.js.Publish(publishCtx, subject, payload)
-	} else {
-		ack, err = c.js.Publish(publishCtx, subject, payload, jetstream.WithMsgID(msgID))
+	msg := nats.NewMsg(subject)
+	msg.Data = payload
+	if c.propagator != nil {
+		c.propagator.Inject(ctx, natsHeaderCarrier{header: msg.Header})
 	}
+
+	var options []jetstream.PublishOpt
+	if msgID != "" {
+		options = append(options, jetstream.WithMsgID(msgID))
+	}
+	ack, err := c.js.PublishMsg(publishCtx, msg, options...)
 	if err != nil {
 		return PublishAck{}, newOperationError("publish jetstream message", err)
 	}
