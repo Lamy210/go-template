@@ -179,6 +179,73 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	}
 }
 
+func TestAccessLogUsesResolvedRoutePattern(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(logger, nil, nil))
+	router.Get("/widgets/{widgetID}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/widgets/12345", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["route"] != "/widgets/{widgetID}" {
+		t.Fatalf("route = %v, want route template", entry["route"])
+	}
+	if _, exists := entry["path"]; exists {
+		t.Fatalf("access log contains raw path field: %s", logs.String())
+	}
+	if strings.Contains(logs.String(), "12345") {
+		t.Fatalf("access log exposed raw path parameter: %s", logs.String())
+	}
+}
+
+func TestAccessLogDoesNotLogUnmatchedRawPath(t *testing.T) {
+	t.Parallel()
+
+	const sensitivePath = "/not-registered/secret-value-12345"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(logger, nil, nil))
+
+	req := httptest.NewRequest(http.MethodGet, sensitivePath, nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNotFound)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["route"] != unmatchedRoute {
+		t.Fatalf("route = %v, want %q", entry["route"], unmatchedRoute)
+	}
+	if _, exists := entry["path"]; exists {
+		t.Fatalf("access log contains raw path field: %s", logs.String())
+	}
+	if strings.Contains(logs.String(), sensitivePath) ||
+		strings.Contains(logs.String(), "secret-value-12345") {
+		t.Fatalf("access log exposed unmatched raw path: %s", logs.String())
+	}
+}
+
 func TestRouteObserverUsesResolvedChiPattern(t *testing.T) {
 	t.Parallel()
 
