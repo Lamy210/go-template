@@ -125,15 +125,15 @@ func TestMessagingOperationSpans(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		start           func(*Provider) (context.Context, func(error))
-		wantSpanName    string
-		wantKind        trace.SpanKind
-		wantOperation   string
-		wantType        string
-		finishErr       error
-		wantStatus      codes.Code
-		wantErrorType   string
+		name          string
+		start         func(*Provider) (context.Context, func(error))
+		wantSpanName  string
+		wantKind      trace.SpanKind
+		wantOperation string
+		wantType      string
+		finishErr     error
+		wantStatus    codes.Code
+		wantErrorType string
 	}{
 		{
 			name: "publish",
