@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -136,8 +137,21 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		}
 	case err := <-fatal:
 		consumeCtx.Stop()
-		<-consumeCtx.Closed()
-		return err
+		stopCtx, cancel := context.WithTimeout(
+			context.Background(),
+			cfg.HandlerTimeout+cfg.AckTimeout,
+		)
+		defer cancel()
+
+		select {
+		case <-consumeCtx.Closed():
+			return err
+		case <-stopCtx.Done():
+			return errors.Join(
+				err,
+				newOperationError("stop jetstream consumer", stopCtx.Err()),
+			)
+		}
 	}
 }
 
