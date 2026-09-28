@@ -162,6 +162,49 @@ func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
 	}
 }
 
+func TestDispatcherContainsPublisherPanicAsFatalError(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{
+		claims: [][]ClaimedEvent{{
+			{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token",
+			},
+		}},
+	}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			panic("sensitive publisher panic value")
+		},
+		nil,
+	)
+
+	err := dispatcher.Run(context.Background())
+	if !errors.Is(err, errPublisherPanic) {
+		t.Fatalf("Run() error = %v, want publisher panic sentinel", err)
+	}
+	if got := err.Error(); got != "publish outbox event" {
+		t.Fatalf("Run() error text = %q, want sanitized operation", got)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.published) != 0 || len(store.retried) != 0 || len(store.failed) != 0 {
+		t.Fatalf(
+			"publisher panic mutated durable state: published=%d retried=%d failed=%d",
+			len(store.published),
+			len(store.retried),
+			len(store.failed),
+		)
+	}
+}
+
 func TestDispatcherSchedulesCappedRetry(t *testing.T) {
 	t.Parallel()
 
