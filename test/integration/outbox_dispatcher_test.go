@@ -108,14 +108,14 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 		},
 		propagator,
 		outbox.DispatcherConfig{
-			BatchSize:         10,
-			PollInterval:      20 * time.Millisecond,
-			Lease:             2 * time.Second,
-			MaxAttempts:       3,
-			RetryBaseDelay:    50 * time.Millisecond,
-			RetryMaxDelay:     200 * time.Millisecond,
-			PublishTimeout:    500 * time.Millisecond,
-			StoreTimeout: 500 * time.Millisecond,
+			BatchSize:      10,
+			PollInterval:   20 * time.Millisecond,
+			Lease:          2 * time.Second,
+			MaxAttempts:    3,
+			RetryBaseDelay: 50 * time.Millisecond,
+			RetryMaxDelay:  200 * time.Millisecond,
+			PublishTimeout: 500 * time.Millisecond,
+			StoreTimeout:   500 * time.Millisecond,
 		},
 	)
 	if err != nil {
