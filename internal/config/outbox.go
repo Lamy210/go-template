@@ -188,12 +188,14 @@ func (c OutboxConfig) Validate() error {
 	if c.StoreTimeout <= 0 {
 		return fmt.Errorf("OUTBOX_DISPATCH_STORE_TIMEOUT must be positive")
 	}
-	if c.Lease <= c.PublishTimeout+c.StoreTimeout {
+	if c.Lease <= c.PublishTimeout ||
+		c.StoreTimeout >= c.Lease-c.PublishTimeout {
 		return fmt.Errorf(
 			"OUTBOX_DISPATCH_LEASE must exceed publish plus store timeouts",
 		)
 	}
-	if c.ShutdownTimeout <= c.PublishTimeout+c.StoreTimeout {
+	if c.ShutdownTimeout <= c.PublishTimeout ||
+		c.StoreTimeout >= c.ShutdownTimeout-c.PublishTimeout {
 		return fmt.Errorf(
 			"OUTBOX_DISPATCH_SHUTDOWN_TIMEOUT must exceed publish plus store timeouts",
 		)
