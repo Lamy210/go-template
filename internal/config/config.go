@@ -31,6 +31,7 @@ type Config struct {
 	Database    DatabaseConfig
 	NATS        NATSConfig
 	Telemetry   TelemetryConfig
+	Outbox      OutboxConfig
 }
 
 // HTTPConfig contains HTTP server limits and timeout policy.
@@ -93,6 +94,10 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	outboxConfig, err := loadOutbox(lookup)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		ServiceName: stringValue(lookup, "SERVICE_NAME", defaultServiceName),
@@ -111,6 +116,7 @@ func load(lookup lookupEnv) (Config, error) {
 		Database:  databaseConfig,
 		NATS:      natsConfig,
 		Telemetry: telemetryConfig,
+		Outbox:    outboxConfig,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -159,6 +165,15 @@ func (c Config) Validate() error {
 	}
 	if err := c.Telemetry.Validate(); err != nil {
 		return err
+	}
+	if err := c.Outbox.Validate(); err != nil {
+		return err
+	}
+	if c.Outbox.Enabled && !c.Database.Enabled {
+		return fmt.Errorf("DATABASE_ENABLED must be true when OUTBOX_DISPATCH_ENABLED=true")
+	}
+	if c.Outbox.Enabled && !c.NATS.Enabled {
+		return fmt.Errorf("NATS_ENABLED must be true when OUTBOX_DISPATCH_ENABLED=true")
 	}
 	return nil
 }

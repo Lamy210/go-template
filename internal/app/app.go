@@ -8,12 +8,15 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/Lamy210/go-template/internal/buildinfo"
 	"github.com/Lamy210/go-template/internal/config"
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/platform/database"
 	"github.com/Lamy210/go-template/internal/platform/httpserver"
 	"github.com/Lamy210/go-template/internal/platform/messaging"
+	"github.com/Lamy210/go-template/internal/platform/outbox"
 	"github.com/Lamy210/go-template/internal/platform/telemetry"
 )
 
@@ -98,6 +101,7 @@ func Run(ctx context.Context) error {
 	}
 
 	var databaseShutdown func(context.Context) error
+	var outboxStore *outbox.Store
 	if cfg.Database.Enabled {
 		pool, err := database.Open(ctx, database.Config{
 			URL:               cfg.Database.URL,
@@ -131,6 +135,13 @@ func Run(ctx context.Context) error {
 				logger.Warn("database shutdown failed")
 			}
 		}()
+
+		if cfg.Outbox.Enabled {
+			outboxStore, err = outbox.NewStore(pool)
+			if err != nil {
+				return fmt.Errorf("initialize outbox store: %w", err)
+			}
+		}
 
 		readinessChecks = append(
 			readinessChecks,
@@ -193,6 +204,41 @@ func Run(ctx context.Context) error {
 		)
 	}
 
+	var outboxDispatcher *outbox.Dispatcher
+	var outboxCancel context.CancelFunc
+	var outboxErrCh <-chan error
+	outboxStopped := false
+	if cfg.Outbox.Enabled {
+		var propagator coreprop.TextMapPropagator
+		if telemetryProvider != nil {
+			propagator = telemetryProvider
+		}
+
+		dispatcher, err := outbox.NewDispatcher(
+			outboxStore,
+			func(publishCtx context.Context, subject, eventID string, payload []byte) error {
+				_, err := natsClient.Publish(publishCtx, subject, eventID, payload)
+				return err
+			},
+			propagator,
+			outbox.DispatcherConfig{
+				BatchSize:      cfg.Outbox.BatchSize,
+				PollInterval:   cfg.Outbox.PollInterval,
+				Lease:          cfg.Outbox.Lease,
+				MaxAttempts:    cfg.Outbox.MaxAttempts,
+				RetryBaseDelay: cfg.Outbox.RetryBaseDelay,
+				RetryMaxDelay:  cfg.Outbox.RetryMaxDelay,
+				PublishTimeout: cfg.Outbox.PublishTimeout,
+				StoreTimeout:   cfg.Outbox.StoreTimeout,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("initialize outbox dispatcher: %w", err)
+		}
+
+		outboxDispatcher = dispatcher
+	}
+
 	server, err := httpserver.New(
 		httpserver.Config{
 			Addr:              cfg.HTTP.Addr,
@@ -212,6 +258,21 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("initialize http server: %w", err)
 	}
 
+	if outboxDispatcher != nil {
+		dispatchCtx, cancelOutbox := context.WithCancel(context.WithoutCancel(ctx))
+		outboxCancel = cancelOutbox
+		runCh := make(chan error, 1)
+		outboxErrCh = runCh
+		go func() {
+			runCh <- outboxDispatcher.Run(dispatchCtx)
+		}()
+
+		logger.Info("transactional outbox dispatcher started",
+			"batch_size", cfg.Outbox.BatchSize,
+			"max_attempts", cfg.Outbox.MaxAttempts,
+		)
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -225,9 +286,17 @@ func Run(ctx context.Context) error {
 		"build_date", info.BuildDate,
 	)
 
+	var runErr error
 	select {
 	case err := <-errCh:
-		return err
+		runErr = err
+	case err := <-outboxErrCh:
+		outboxStopped = true
+		if err != nil {
+			runErr = fmt.Errorf("run outbox dispatcher: %w", err)
+		} else {
+			runErr = errors.New("outbox dispatcher stopped unexpectedly")
+		}
 	case <-ctx.Done():
 		logger.Info("shutdown requested")
 	}
@@ -239,6 +308,33 @@ func Run(ctx context.Context) error {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown http server: %w", err))
 	}
 	cancelHTTP()
+
+	if outboxCancel != nil {
+		outboxCancel()
+		if !outboxStopped {
+			timer := time.NewTimer(cfg.Outbox.ShutdownTimeout)
+			select {
+			case err := <-outboxErrCh:
+				if err != nil {
+					shutdownErr = errors.Join(
+						shutdownErr,
+						fmt.Errorf("shutdown outbox dispatcher: %w", err),
+					)
+				}
+			case <-timer.C:
+				shutdownErr = errors.Join(
+					shutdownErr,
+					errors.New("shutdown outbox dispatcher: deadline exceeded"),
+				)
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+		}
+	}
 
 	if natsClient != nil {
 		natsDrainCtx, cancelNATS := context.WithTimeout(context.Background(), cfg.NATS.DrainTimeout)
@@ -274,8 +370,8 @@ func Run(ctx context.Context) error {
 		cancelTelemetry()
 	}
 
-	if shutdownErr != nil {
-		return shutdownErr
+	if runErr != nil || shutdownErr != nil {
+		return errors.Join(runErr, shutdownErr)
 	}
 
 	logger.Info("shutdown complete")

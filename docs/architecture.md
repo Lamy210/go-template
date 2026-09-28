@@ -65,7 +65,7 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
 - Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
 - Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.
-- Outbox: `internal/platform/outbox`, caller-owned transactional enqueue plus PostgreSQL lease/settlement primitives. It is transport-neutral and does not import NATS.
+- Outbox: `internal/platform/outbox`, caller-owned transactional enqueue, PostgreSQL lease/settlement primitives, and a bounded transport-neutral dispatcher. It does not import NATS.
 
 A profile must be removable without forcing unrelated application code to understand it. PostgreSQL, NATS, and telemetry therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
@@ -117,19 +117,26 @@ high-cardinality values.
 
 Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
 
-Shutdown order is HTTP first, NATS second when enabled, PostgreSQL third when enabled, and telemetry last so completed work can be flushed before process exit. HTTP shutdown first attempts graceful drain within `HTTP_SHUTDOWN_TIMEOUT`; if that context expires, the adapter force-closes active HTTP connections before dependency teardown continues. PostgreSQL close is independently bounded by `DATABASE_SHUTDOWN_TIMEOUT` because pgxpool close itself is not context-aware.
+Shutdown order is HTTP first, the outbox dispatcher second when enabled, NATS third when enabled, PostgreSQL fourth when enabled, and telemetry last so completed work can be flushed before process exit. HTTP shutdown first attempts graceful drain within `HTTP_SHUTDOWN_TIMEOUT`; if that context expires, the adapter force-closes active HTTP connections before dependency teardown continues. PostgreSQL close is independently bounded by `DATABASE_SHUTDOWN_TIMEOUT` because pgxpool close itself is not context-aware.
 
 See [telemetry.md](telemetry.md).
 
 ## Transactional outbox boundary
 
-The outbox storage primitive closes the database/message-intent atomicity gap
-without making PostgreSQL depend on NATS. Application use cases enqueue events
-inside their existing caller-owned transaction.
+The outbox closes the database/message-intent atomicity gap without making
+PostgreSQL depend on NATS. Application use cases enqueue events inside their
+existing caller-owned transaction.
 
 Dispatch claiming uses `FOR UPDATE SKIP LOCKED`, commits the lease before
-external I/O, and settles by row ID + lease token. The resulting semantics are
-at-least-once; stable event IDs must be reused as broker deduplication IDs.
+external I/O, and settles by row ID + lease token. The optional dispatcher
+accepts a transport-neutral publisher function; only the application composition
+root adapts that function to `messaging.Client.Publish`.
+
+A claimed batch is published concurrently with explicit batch, lease, publish,
+store-operation, retry, and shutdown bounds. Stable event IDs are reused as
+broker deduplication IDs. Broker failures become finite retry/permanent-failure
+state transitions, while storage or settlement failures stop the runtime rather
+than hiding uncertain durable state.
 
 Only `traceparent` and `tracestate` are persisted. Baggage is deliberately
 excluded from durable outbox metadata.
@@ -153,5 +160,6 @@ The current increments provide:
 - optional PostgreSQL with pgx/sqlc/Atlas;
 - optional NATS JetStream with bounded retry/quarantine, readiness, transport-neutral context propagation, and optional operation tracing;
 - optional OpenTelemetry traces/metrics with OTLP/HTTP export, HTTP instrumentation, and W3C propagation plus publish/process spans across NATS when both profiles are enabled;
-- unit, transport, database/Testcontainers, messaging, and telemetry export tests;
+- optional transactional outbox dispatch with bounded claiming, concurrent publish, finite retry, and lifecycle wiring;
+- unit, transport, database/Testcontainers, messaging, outbox, and telemetry export tests;
 - Docker and CI quality gates.

@@ -1,0 +1,379 @@
+package outbox
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+)
+
+type fakeEventStore struct {
+	mu        sync.Mutex
+	claims    [][]ClaimedEvent
+	claimErr  error
+	claimFn   func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
+	published []ClaimedEvent
+	retried   []retryCall
+	failed    []ClaimedEvent
+	settleErr error
+}
+
+type retryCall struct {
+	event ClaimedEvent
+	delay time.Duration
+}
+
+func (s *fakeEventStore) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, error) {
+	if s.claimFn != nil {
+		return s.claimFn(ctx, cfg)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.claimErr != nil {
+		return nil, s.claimErr
+	}
+	if len(s.claims) == 0 {
+		return nil, nil
+	}
+	out := s.claims[0]
+	s.claims = s.claims[1:]
+	return out, nil
+}
+
+func (s *fakeEventStore) MarkPublished(_ context.Context, event ClaimedEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settleErr != nil {
+		return s.settleErr
+	}
+	s.published = append(s.published, event)
+	return nil
+}
+
+func (s *fakeEventStore) Retry(_ context.Context, event ClaimedEvent, delay time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settleErr != nil {
+		return s.settleErr
+	}
+	s.retried = append(s.retried, retryCall{event: event, delay: delay})
+	return nil
+}
+
+func (s *fakeEventStore) MarkFailed(_ context.Context, event ClaimedEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.settleErr != nil {
+		return s.settleErr
+	}
+	s.failed = append(s.failed, event)
+	return nil
+}
+
+type dispatchContextKey struct{}
+
+type dispatchPropagator struct{}
+
+func (dispatchPropagator) Inject(context.Context, coreprop.TextMapCarrier) {}
+
+func (dispatchPropagator) Extract(
+	ctx context.Context,
+	carrier coreprop.TextMapCarrier,
+) context.Context {
+	return context.WithValue(ctx, dispatchContextKey{}, carrier.Get("traceparent"))
+}
+
+func TestDispatcherMarksSuccessfulPublish(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	event := ClaimedEvent{
+		ID:        1,
+		EventID:   "event-1",
+		Subject:   "example.created",
+		Payload:   []byte("payload"),
+		Attempts:  1,
+		LockToken: "token",
+	}
+	var publishedContext string
+	dispatcher := mustDispatcher(t, store, func(ctx context.Context, subject, eventID string, payload []byte) error {
+		if subject != event.Subject || eventID != event.EventID || string(payload) != "payload" {
+			t.Fatalf("unexpected publish args: %q %q %q", subject, eventID, payload)
+		}
+		publishedContext, _ = ctx.Value(dispatchContextKey{}).(string)
+		return nil
+	}, dispatchPropagator{})
+
+	event.Traceparent = "trace-context"
+	if err := dispatcher.dispatchOne(context.Background(), event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+	if publishedContext != "trace-context" {
+		t.Fatalf("restored trace context = %q", publishedContext)
+	}
+	if len(store.published) != 1 {
+		t.Fatalf("published settlements = %d, want 1", len(store.published))
+	}
+}
+
+func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		started <- struct{}{}
+		<-release
+		return nil
+	}, nil)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{
+			{ID: 1, EventID: "event-1", Subject: "example.1", LockToken: "token-1"},
+			{ID: 2, EventID: "event-2", Subject: "example.2", LockToken: "token-2"},
+		})
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("claimed batch was not started concurrently")
+		}
+	}
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("dispatchBatch() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("dispatchBatch() did not finish")
+	}
+	if len(store.published) != 2 {
+		t.Fatalf("published settlements = %d, want 2", len(store.published))
+	}
+}
+
+func TestDispatcherSchedulesCappedRetry(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		return errors.New("broker unavailable")
+	}, nil)
+	dispatcher.cfg.RetryBaseDelay = time.Second
+	dispatcher.cfg.RetryMaxDelay = 3 * time.Second
+
+	event := ClaimedEvent{ID: 1, Attempts: 3, LockToken: "token"}
+	if err := dispatcher.dispatchOne(context.Background(), event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+	if len(store.retried) != 1 {
+		t.Fatalf("retry settlements = %d, want 1", len(store.retried))
+	}
+	if got := store.retried[0].delay; got != 3*time.Second {
+		t.Fatalf("retry delay = %v, want 3s", got)
+	}
+}
+
+func TestDispatcherMarksFailedAtAttemptLimit(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		return errors.New("broker unavailable")
+	}, nil)
+	event := ClaimedEvent{
+		ID:        1,
+		Attempts:  dispatcher.cfg.MaxAttempts,
+		LockToken: "token",
+	}
+	if err := dispatcher.dispatchOne(context.Background(), event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+	if len(store.failed) != 1 {
+		t.Fatalf("failed settlements = %d, want 1", len(store.failed))
+	}
+}
+
+func TestDispatcherCancellationReleasesLeaseForRetry(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	ctx, cancel := context.WithCancel(context.Background())
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		cancel()
+		return context.Canceled
+	}, nil)
+
+	event := ClaimedEvent{ID: 1, Attempts: dispatcher.cfg.MaxAttempts, LockToken: "token"}
+	if err := dispatcher.dispatchOne(ctx, event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+	if len(store.retried) != 1 {
+		t.Fatalf("retry settlements = %d, want 1", len(store.retried))
+	}
+	if len(store.failed) != 0 {
+		t.Fatalf("failed settlements = %d, want 0", len(store.failed))
+	}
+}
+
+func TestDispatcherCancellationDoesNotHideSettlementFailure(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("database unavailable")
+	store := &fakeEventStore{
+		claims: [][]ClaimedEvent{{
+			{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token",
+			},
+		}},
+		settleErr: sentinel,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		cancel()
+		return context.Canceled
+	}, nil)
+
+	err := dispatcher.Run(ctx)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Run() error = %v, want settlement failure", err)
+	}
+	if got := err.Error(); got != "release canceled outbox event" {
+		t.Fatalf("Run() error text = %q", got)
+	}
+}
+
+func TestDispatcherConfigRejectsOverflowingTimeoutBudget(t *testing.T) {
+	t.Parallel()
+
+	maxDuration := time.Duration(1<<63 - 1)
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          24 * time.Hour,
+		MaxAttempts:    1,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: maxDuration,
+		StoreTimeout:   maxDuration,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want overflowing budget error")
+	}
+}
+
+func TestDispatcherBoundsClaimWithStoreTimeout(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("claim stopped")
+	store := &fakeEventStore{
+		claimFn: func(ctx context.Context, _ ClaimConfig) ([]ClaimedEvent, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("Claim() context has no deadline")
+			}
+			if remaining := time.Until(deadline); remaining <= 0 || remaining > 2*time.Second {
+				t.Fatalf("Claim() deadline remaining = %v, want bounded positive duration", remaining)
+			}
+			return nil, sentinel
+		},
+	}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error { return nil },
+		nil,
+	)
+
+	err := dispatcher.Run(context.Background())
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Run() error = %v, want wrapped sentinel", err)
+	}
+	if got := err.Error(); got != "claim outbox dispatch batch" {
+		t.Fatalf("Run() error text = %q", got)
+	}
+}
+
+func TestDispatcherReturnsStorageFailure(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("database unavailable")
+	store := &fakeEventStore{settleErr: sentinel}
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		return nil
+	}, nil)
+
+	err := dispatcher.dispatchOne(
+		context.Background(),
+		ClaimedEvent{ID: 1, LockToken: "token"},
+	)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("dispatchOne() error = %v, want sentinel", err)
+	}
+	if got := err.Error(); got != "mark outbox event published" {
+		t.Fatalf("dispatchOne() error text = %q", got)
+	}
+}
+
+func TestRetryDelayIsExponentiallyCapped(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		attempt int
+		want    time.Duration
+	}{
+		{attempt: 1, want: time.Second},
+		{attempt: 2, want: 2 * time.Second},
+		{attempt: 3, want: 4 * time.Second},
+		{attempt: 4, want: 5 * time.Second},
+		{attempt: 100, want: 5 * time.Second},
+	}
+	for _, tt := range tests {
+		if got := retryDelay(tt.attempt, time.Second, 5*time.Second); got != tt.want {
+			t.Fatalf("retryDelay(%d) = %v, want %v", tt.attempt, got, tt.want)
+		}
+	}
+}
+
+func mustDispatcher(
+	t *testing.T,
+	store EventStore,
+	publisher Publisher,
+	propagator coreprop.TextMapPropagator,
+) *Dispatcher {
+	t.Helper()
+
+	dispatcher, err := NewDispatcher(
+		store,
+		publisher,
+		propagator,
+		DispatcherConfig{
+			BatchSize:      10,
+			PollInterval:   time.Millisecond,
+			Lease:          10 * time.Second,
+			MaxAttempts:    5,
+			RetryBaseDelay: time.Second,
+			RetryMaxDelay:  time.Minute,
+			PublishTimeout: time.Second,
+			StoreTimeout:   time.Second,
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewDispatcher() error = %v", err)
+	}
+	return dispatcher
+}
