@@ -84,6 +84,12 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 			name: "zero attempts",
 			mutate: func(cfg *OutboxConfig) { cfg.MaxAttempts = 0 },
 		},
+		{
+			name: "shutdown budget too small",
+			mutate: func(cfg *OutboxConfig) {
+				cfg.ShutdownTimeout = cfg.PublishTimeout + cfg.SettlementTimeout
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
