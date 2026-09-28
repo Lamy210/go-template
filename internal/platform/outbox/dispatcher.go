@@ -21,14 +21,14 @@ type Publisher func(context.Context, string, string, []byte) error
 
 // DispatcherConfig bounds polling, publishing, retry, and settlement behavior.
 type DispatcherConfig struct {
-	BatchSize         int
-	PollInterval      time.Duration
-	Lease             time.Duration
-	MaxAttempts       int
-	RetryBaseDelay    time.Duration
-	RetryMaxDelay     time.Duration
-	PublishTimeout    time.Duration
-	StoreTimeout time.Duration
+	BatchSize      int
+	PollInterval   time.Duration
+	Lease          time.Duration
+	MaxAttempts    int
+	RetryBaseDelay time.Duration
+	RetryMaxDelay  time.Duration
+	PublishTimeout time.Duration
+	StoreTimeout   time.Duration
 }
 
 // Validate rejects unbounded dispatcher behavior.
