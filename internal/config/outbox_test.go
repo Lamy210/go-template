@@ -93,6 +93,16 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 				cfg.ShutdownTimeout = cfg.PublishTimeout + cfg.StoreTimeout
 			},
 		},
+		{
+			name: "overflowing publish and store budget",
+			mutate: func(cfg *OutboxConfig) {
+				maxDuration := time.Duration(1<<63 - 1)
+				cfg.Lease = 24 * time.Hour
+				cfg.PublishTimeout = maxDuration
+				cfg.StoreTimeout = maxDuration
+				cfg.ShutdownTimeout = maxDuration
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
