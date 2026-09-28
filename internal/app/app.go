@@ -204,6 +204,7 @@ func Run(ctx context.Context) error {
 		)
 	}
 
+	var outboxDispatcher *outbox.Dispatcher
 	var outboxCancel context.CancelFunc
 	var outboxErrCh <-chan error
 	outboxStopped := false
@@ -235,18 +236,7 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("initialize outbox dispatcher: %w", err)
 		}
 
-		dispatchCtx, cancelOutbox := context.WithCancel(context.WithoutCancel(ctx))
-		outboxCancel = cancelOutbox
-		runCh := make(chan error, 1)
-		outboxErrCh = runCh
-		go func() {
-			runCh <- dispatcher.Run(dispatchCtx)
-		}()
-
-		logger.Info("transactional outbox dispatcher started",
-			"batch_size", cfg.Outbox.BatchSize,
-			"max_attempts", cfg.Outbox.MaxAttempts,
-		)
+		outboxDispatcher = dispatcher
 	}
 
 	server, err := httpserver.New(
@@ -266,6 +256,21 @@ func Run(ctx context.Context) error {
 	)
 	if err != nil {
 		return fmt.Errorf("initialize http server: %w", err)
+	}
+
+	if outboxDispatcher != nil {
+		dispatchCtx, cancelOutbox := context.WithCancel(context.WithoutCancel(ctx))
+		outboxCancel = cancelOutbox
+		runCh := make(chan error, 1)
+		outboxErrCh = runCh
+		go func() {
+			runCh <- outboxDispatcher.Run(dispatchCtx)
+		}()
+
+		logger.Info("transactional outbox dispatcher started",
+			"batch_size", cfg.Outbox.BatchSize,
+			"max_attempts", cfg.Outbox.MaxAttempts,
+		)
 	}
 
 	errCh := make(chan error, 1)
