@@ -74,8 +74,9 @@ Settlement requires both row ID and current lease token.
 - `Retry` clears the lease and moves `available_at`.
 - `MarkFailed` clears the lease and permanently stops automatic dispatch.
 
-A stale/expired worker cannot settle a row once another dispatcher owns a newer
-lease token.
+Settlement requires an unexpired lease as well as the matching token. A worker
+cannot settle after its lease expires, even before another dispatcher reclaims
+the row; a later claimant receives a fresh token.
 
 ## Delivery semantics
 
