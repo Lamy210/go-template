@@ -170,10 +170,10 @@ func (c Config) Validate() error {
 		return err
 	}
 	if c.Outbox.Enabled && !c.Database.Enabled {
-		return fmt.Errorf("DATABASE_ENABLED must be true when OUTBOX_ENABLED=true")
+		return fmt.Errorf("DATABASE_ENABLED must be true when OUTBOX_DISPATCH_ENABLED=true")
 	}
 	if c.Outbox.Enabled && !c.NATS.Enabled {
-		return fmt.Errorf("NATS_ENABLED must be true when OUTBOX_ENABLED=true")
+		return fmt.Errorf("NATS_ENABLED must be true when OUTBOX_DISPATCH_ENABLED=true")
 	}
 	return nil
 }
