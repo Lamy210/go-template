@@ -97,3 +97,39 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigRejectsOutboxWithoutDatabaseAndNATS(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"OUTBOX_ENABLED": "true",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil {
+		t.Fatal("load() error = nil, want dependency error")
+	}
+}
+
+func TestConfigAcceptsOutboxWithDatabaseAndNATS(t *testing.T) {
+	t.Parallel()
+
+	values := map[string]string{
+		"DATABASE_ENABLED": "true",
+		"DATABASE_URL":     "postgres://example.invalid/app",
+		"NATS_ENABLED":     "true",
+		"OUTBOX_ENABLED":   "true",
+	}
+	cfg, err := load(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	})
+	if err != nil {
+		t.Fatalf("load() error = %v", err)
+	}
+	if !cfg.Outbox.Enabled || !cfg.Database.Enabled || !cfg.NATS.Enabled {
+		t.Fatalf("unexpected profile state: %+v", cfg)
+	}
+}
