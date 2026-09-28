@@ -19,6 +19,8 @@ type EventStore interface {
 // Publisher sends one durable event to the external broker.
 type Publisher func(context.Context, string, string, []byte) error
 
+var errPublisherPanic = errors.New("outbox publisher panicked")
+
 // DispatcherConfig bounds polling, publishing, retry, and settlement behavior.
 type DispatcherConfig struct {
 	BatchSize      int
@@ -158,8 +160,20 @@ func (d *Dispatcher) dispatchBatch(
 func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error {
 	publishCtx := d.restoreContext(ctx, event)
 	publishCtx, cancelPublish := context.WithTimeout(publishCtx, d.cfg.PublishTimeout)
-	err := d.publisher(publishCtx, event.Subject, event.EventID, event.Payload)
+	err := invokePublisher(
+		d.publisher,
+		publishCtx,
+		event.Subject,
+		event.EventID,
+		event.Payload,
+	)
 	cancelPublish()
+	if errors.Is(err, errPublisherPanic) {
+		// A publisher panic is a programming/infrastructure failure, not a
+		// normal broker rejection. Do not mutate durable state: leave the
+		// lease to expire and stop the dispatcher with a sanitized error.
+		return newOperationError("publish outbox event", err)
+	}
 
 	settleBase := context.WithoutCancel(ctx)
 	settleCtx, cancelSettle := context.WithTimeout(settleBase, d.cfg.StoreTimeout)
@@ -197,6 +211,21 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return newOperationError("schedule outbox retry", retryErr)
 	}
 	return nil
+}
+
+func invokePublisher(
+	publisher Publisher,
+	ctx context.Context,
+	subject string,
+	eventID string,
+	payload []byte,
+) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errPublisherPanic
+		}
+	}()
+	return publisher(ctx, subject, eventID, payload)
 }
 
 func (d *Dispatcher) restoreContext(

@@ -134,6 +134,11 @@ durable state is still trustworthy. Shutdown cancellation does not suppress a
 lease-release or settlement failure; uncertain durable state remains a fatal
 runtime error even while the process is stopping.
 
+A panic from the injected publisher is also treated as a fatal infrastructure
+failure. The panic value is discarded, no published/retry/failed settlement is
+written, and the current lease is allowed to expire so a later healthy
+dispatcher can retry the event with the same stable event ID.
+
 ## Settlement
 
 Settlement requires both row ID and current lease token.
@@ -209,9 +214,9 @@ optional profiles.
 Raw PostgreSQL and broker errors are not copied into normal dispatcher error
 strings.
 
-Payloads and propagation values are never copied into infrastructure error
-strings. Only `traceparent` and `tracestate` are durably persisted by the
-generic outbox.
+Payloads, propagation values, and publisher panic values are never copied into
+infrastructure error strings. Only `traceparent` and `tracestate` are durably
+persisted by the generic outbox.
 
 ## Integration tests
 
