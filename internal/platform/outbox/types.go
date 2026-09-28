@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -128,6 +129,7 @@ func (c *propagationCarrier) Keys() []string {
 	for key := range c.values {
 		keys = append(keys, key)
 	}
+	sort.Strings(keys)
 	return keys
 }
 
