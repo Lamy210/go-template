@@ -3,26 +3,12 @@ package outbox
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type recordingDBTX struct {
-	args []any
-	err  error
-}
-
-func (db *recordingDBTX) Exec(
-	context.Context,
-	string,
-	...any,
-) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errors.New("unexpected direct Exec call")
-}
 
 type enqueueDBTX struct {
 	args []any
@@ -73,9 +59,28 @@ func TestEnqueuePersistsOnlyTraceContextMetadata(t *testing.T) {
 		t.Fatalf("tracestate = %v", got)
 	}
 	for _, arg := range db.args {
-		if strings.Contains(strings.TrimSpace(toString(arg)), "must-not-persist") {
+		if got, ok := arg.(string); ok && got == "secret=must-not-persist" {
 			t.Fatal("baggage was persisted")
 		}
+	}
+}
+
+func TestEnqueueSanitizesDatabaseErrors(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("postgres diagnostic with secret")
+	db := &enqueueDBTX{err: sentinel}
+	err := Enqueue(
+		context.Background(),
+		db,
+		Event{ID: "event-1", Subject: "example.created"},
+		nil,
+	)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Enqueue() error = %v, want wrapped sentinel", err)
+	}
+	if got := err.Error(); got != "enqueue outbox event" {
+		t.Fatalf("Enqueue() error text = %q", got)
 	}
 }
 
@@ -114,26 +119,4 @@ func TestDurationIntervalUsesIntegerMicroseconds(t *testing.T) {
 	if got, want := durationInterval(1500*time.Microsecond), "1500 microseconds"; got != want {
 		t.Fatalf("durationInterval() = %q, want %q", got, want)
 	}
-}
-
-func toString(value any) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(strings.ReplaceAll(
-		strings.TrimSpace(strings.Repeat("", 0))+strings.TrimSpace(
-			func() string {
-				switch v := value.(type) {
-				case string:
-					return v
-				case []byte:
-					return string(v)
-				default:
-					return ""
-				}
-			}(),
-		),
-		"\x00",
-		"",
-	))
 }
