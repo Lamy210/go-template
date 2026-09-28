@@ -115,6 +115,49 @@ func TestDispatcherMarksSuccessfulPublish(t *testing.T) {
 	}
 }
 
+func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		started <- struct{}{}
+		<-release
+		return nil
+	}, nil)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{
+			{ID: 1, EventID: "event-1", Subject: "example.1", LockToken: "token-1"},
+			{ID: 2, EventID: "event-2", Subject: "example.2", LockToken: "token-2"},
+		})
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			close(release)
+			t.Fatal("claimed batch was not started concurrently")
+		}
+	}
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("dispatchBatch() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("dispatchBatch() did not finish")
+	}
+	if len(store.published) != 2 {
+		t.Fatalf("published settlements = %d, want 2", len(store.published))
+	}
+}
+
 func TestDispatcherSchedulesCappedRetry(t *testing.T) {
 	t.Parallel()
 
