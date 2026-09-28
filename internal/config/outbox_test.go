@@ -68,7 +68,7 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 	}{
 		{
 			name: "batch too large",
-			mutate: func(cfg *OutboxConfig) { cfg.BatchSize = 1001 },
+			mutate: func(cfg *OutboxConfig) { cfg.BatchSize = 257 },
 		},
 		{
 			name: "lease not longer than publish plus settlement",
