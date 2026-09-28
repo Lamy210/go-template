@@ -228,7 +228,7 @@ func Run(ctx context.Context) error {
 				RetryBaseDelay:    cfg.Outbox.RetryBaseDelay,
 				RetryMaxDelay:     cfg.Outbox.RetryMaxDelay,
 				PublishTimeout:    cfg.Outbox.PublishTimeout,
-				SettlementTimeout: cfg.Outbox.SettlementTimeout,
+				StoreTimeout: cfg.Outbox.StoreTimeout,
 			},
 		)
 		if err != nil {
