@@ -126,10 +126,10 @@ func TestConfigAcceptsOutboxDispatcherWithDatabaseAndNATS(t *testing.T) {
 	t.Parallel()
 
 	values := map[string]string{
-		"DATABASE_ENABLED":         "true",
-		"DATABASE_URL":             "postgres://example.invalid/app",
-		"NATS_ENABLED":             "true",
-		"OUTBOX_DISPATCH_ENABLED":  "true",
+		"DATABASE_ENABLED":        "true",
+		"DATABASE_URL":            "postgres://example.invalid/app",
+		"NATS_ENABLED":            "true",
+		"OUTBOX_DISPATCH_ENABLED": "true",
 	}
 	cfg, err := load(func(key string) (string, bool) {
 		value, ok := values[key]
