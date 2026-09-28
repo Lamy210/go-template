@@ -95,6 +95,9 @@ func NewStore(pool *pgxpool.Pool) (*Store, error) {
 // Claim leases up to BatchSize available events without holding a database
 // transaction open during external publish calls.
 func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, error) {
+	if s == nil || s.pool == nil {
+		return nil, errors.New("outbox store must not be nil")
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -149,6 +152,9 @@ func (s *Store) MarkPublished(ctx context.Context, event ClaimedEvent) error {
 func (s *Store) Retry(ctx context.Context, event ClaimedEvent, delay time.Duration) error {
 	if delay < time.Microsecond {
 		return errors.New("outbox retry delay must be at least one microsecond")
+	}
+	if delay > maxClaimLease {
+		return errors.New("outbox retry delay must not exceed 24 hours")
 	}
 	return s.transition(
 		ctx,
