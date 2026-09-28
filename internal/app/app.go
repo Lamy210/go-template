@@ -258,6 +258,18 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("initialize http server: %w", err)
 	}
 
+	listener, err := server.Listen(ctx)
+	if err != nil {
+		return fmt.Errorf("bind http listener: %w", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("serve http: %w", err)
+		}
+	}()
+
 	if outboxDispatcher != nil {
 		dispatchCtx, cancelOutbox := context.WithCancel(context.WithoutCancel(ctx))
 		outboxCancel = cancelOutbox
@@ -273,15 +285,8 @@ func Run(ctx context.Context) error {
 		)
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("serve http: %w", err)
-		}
-	}()
-
 	logger.Info("http server started",
-		"addr", cfg.HTTP.Addr,
+		"addr", listener.Addr().String(),
 		"commit", info.Commit,
 		"build_date", info.BuildDate,
 	)
