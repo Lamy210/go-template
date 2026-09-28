@@ -53,6 +53,7 @@ SET published_at = CURRENT_TIMESTAMP,
     lock_token = NULL
 WHERE id = $1
   AND lock_token = $2
+  AND locked_until > CURRENT_TIMESTAMP
   AND published_at IS NULL
   AND failed_at IS NULL
 `
@@ -64,6 +65,7 @@ SET available_at = CURRENT_TIMESTAMP + $3::interval,
     lock_token = NULL
 WHERE id = $1
   AND lock_token = $2
+  AND locked_until > CURRENT_TIMESTAMP
   AND published_at IS NULL
   AND failed_at IS NULL
 `
@@ -75,6 +77,7 @@ SET failed_at = CURRENT_TIMESTAMP,
     lock_token = NULL
 WHERE id = $1
   AND lock_token = $2
+  AND locked_until > CURRENT_TIMESTAMP
   AND published_at IS NULL
   AND failed_at IS NULL
 `
