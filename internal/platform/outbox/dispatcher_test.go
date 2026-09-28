@@ -312,14 +312,14 @@ func mustDispatcher(
 		publisher,
 		propagator,
 		DispatcherConfig{
-			BatchSize:         10,
-			PollInterval:      time.Millisecond,
-			Lease:             10 * time.Second,
-			MaxAttempts:       5,
-			RetryBaseDelay:    time.Second,
-			RetryMaxDelay:     time.Minute,
-			PublishTimeout:    time.Second,
-			StoreTimeout: time.Second,
+			BatchSize:      10,
+			PollInterval:   time.Millisecond,
+			Lease:          10 * time.Second,
+			MaxAttempts:    5,
+			RetryBaseDelay: time.Second,
+			RetryMaxDelay:  time.Minute,
+			PublishTimeout: time.Second,
+			StoreTimeout:   time.Second,
 		},
 	)
 	if err != nil {
