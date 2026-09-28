@@ -14,7 +14,7 @@ An optional NATS JetStream profile adds bounded connection/reconnect policy, exp
 
 An optional OpenTelemetry profile exports stable traces and metrics over OTLP/HTTP with bounded buffering, retry, export, and shutdown behavior. It is disabled by default and is deliberately non-critical to readiness.
 
-A PostgreSQL transactional outbox primitive supports atomic application-state + future-message persistence with lease-based multi-dispatcher claiming. The storage layer is transport-neutral; runtime dispatch is intentionally composed separately.
+A PostgreSQL transactional outbox supports atomic application-state + future-message persistence with lease-based multi-dispatcher claiming. An optional bounded runtime dispatcher publishes claimed rows through the messaging boundary while keeping the outbox package transport-neutral.
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 `SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`.
 
-`DATABASE_ENABLED=false`, `NATS_ENABLED=false`, and `TELEMETRY_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
+`DATABASE_ENABLED=false`, `NATS_ENABLED=false`, `TELEMETRY_ENABLED=false`, and `OUTBOX_DISPATCH_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
 
@@ -71,6 +71,20 @@ make test-integration-external DATABASE_URL="$DATABASE_URL"
 Application startup never runs migrations automatically. Generated sqlc code and `migrations/atlas.sum` are committed and checked for drift in CI. `make test-integration` can run without a pre-existing database by starting PostgreSQL through Testcontainers.
 
 See [docs/database.md](docs/database.md).
+
+## Transactional outbox
+
+Durable outbox enqueue is available as a PostgreSQL primitive independently of the background dispatcher. Enable runtime dispatch only when both PostgreSQL and NATS are enabled:
+
+```bash
+export DATABASE_ENABLED=true
+export NATS_ENABLED=true
+export OUTBOX_DISPATCH_ENABLED=true
+```
+
+The dispatcher claims rows with leases, publishes a bounded concurrent batch with stable `event_id` message IDs, applies finite exponential retry, and settles rows using lease tokens. Claim, publish, store operations, and shutdown all have explicit time budgets.
+
+See [docs/outbox.md](docs/outbox.md).
 
 ## NATS JetStream profile
 
@@ -125,7 +139,7 @@ make vuln
 make build
 ```
 
-GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, external-database integration, self-contained Testcontainers integration, and real NATS JetStream integration.
+GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, external-database integration, self-contained Testcontainers integration, real NATS JetStream integration, and combined PostgreSQL + JetStream outbox dispatch integration.
 
 ## Repository layout
 
@@ -146,7 +160,7 @@ internal/
     httpserver/            HTTP transport
     messaging/             NATS JetStream client/stream/consumer boundary
     telemetry/             OpenTelemetry traces/metrics boundary
-    outbox/                transactional outbox storage boundary
+    outbox/                transactional outbox storage/dispatcher boundary
 migrations/                versioned Atlas migrations + atlas.sum
 sql/
   schema/                  desired SQL schema
