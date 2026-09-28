@@ -130,7 +130,9 @@ unsafe.
 
 Storage/claim/settlement failures are different: the dispatcher returns a
 sanitized runtime error so the process lifecycle can stop rather than pretending
-durable state is still trustworthy.
+durable state is still trustworthy. Shutdown cancellation does not suppress a
+lease-release or settlement failure; uncertain durable state remains a fatal
+runtime error even while the process is stopping.
 
 ## Settlement
 
