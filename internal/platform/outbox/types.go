@@ -12,8 +12,8 @@ import (
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
