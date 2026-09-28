@@ -54,7 +54,8 @@ func (c DispatcherConfig) Validate() error {
 	if c.PublishTimeout <= 0 || c.StoreTimeout <= 0 {
 		return errors.New("outbox dispatcher publish and store timeouts must be positive")
 	}
-	if c.Lease <= c.PublishTimeout+c.StoreTimeout {
+	if c.Lease <= c.PublishTimeout ||
+		c.StoreTimeout >= c.Lease-c.PublishTimeout {
 		return errors.New("outbox dispatcher lease must exceed publish plus store timeouts")
 	}
 	return nil
@@ -123,9 +124,9 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		}
 
 		if err := d.dispatchBatch(ctx, events); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
+			// dispatchBatch only returns storage/settlement failures. Those
+			// errors represent uncertain durable state and must remain visible
+			// even when shutdown cancellation happened concurrently.
 			return err
 		}
 		if ctx.Err() != nil {
