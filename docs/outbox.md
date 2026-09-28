@@ -1,10 +1,15 @@
 # Transactional Outbox
 
-The outbox is a generic PostgreSQL storage primitive for atomically persisting
-future messaging work in the same transaction as application state changes.
+The outbox closes the database/message-intent atomicity gap without making
+PostgreSQL storage depend on a broker.
 
-This first stage deliberately does **not** start a background dispatcher or
-depend on NATS. Runtime dispatch/wiring is a separate composition concern.
+It has two distinct layers:
+
+- durable PostgreSQL enqueue/claim/settlement primitives;
+- an optional bounded runtime dispatcher.
+
+Durable enqueue remains available whenever PostgreSQL is available.
+`OUTBOX_DISPATCH_ENABLED=false` only disables the background dispatcher.
 
 ## Transaction boundary
 
@@ -39,8 +44,7 @@ Each event stores:
 - lease token/deadline;
 - published/failed timestamps.
 
-`event_id` is unique and is intended to become the external message
-deduplication ID.
+`event_id` is unique and becomes the external message deduplication ID.
 
 ## Propagation metadata
 
@@ -49,6 +53,10 @@ Only W3C `traceparent` and `tracestate` are persisted.
 OpenTelemetry Baggage is intentionally discarded at the outbox boundary because
 it can contain credentials, personal data, or high-cardinality metadata and
 would otherwise become durable database content.
+
+When the runtime dispatcher is wired to telemetry, it reconstructs the stored
+trace context before publishing. The NATS publisher then creates its normal
+publish span and injects a fresh message propagation context.
 
 ## Claiming
 
@@ -66,6 +74,64 @@ A claim:
 This permits multiple dispatcher instances without holding a database
 transaction open during broker I/O.
 
+The runtime dispatcher bounds each claim operation by
+`OUTBOX_DISPATCH_STORE_TIMEOUT`.
+
+## Dispatcher
+
+The dispatcher owns no NATS-specific type. It accepts a transport-neutral
+publisher function:
+
+```go
+type Publisher func(
+    context.Context,
+    string, // subject
+    string, // stable event/message ID
+    []byte, // payload
+) error
+```
+
+The application composition root adapts `messaging.Client.Publish` to this
+function only when PostgreSQL, NATS, and the dispatcher profile are all enabled.
+
+Each claimed batch is dispatched concurrently. The configured batch size is
+therefore also the upper bound on dispatcher publish concurrency.
+
+The default dispatcher bounds are:
+
+- batch size: 8;
+- poll interval: 500ms;
+- lease: 30s;
+- max attempts: 10;
+- retry base delay: 1s;
+- retry max delay: 1m;
+- publish timeout: 5s;
+- store operation timeout: 2s;
+- shutdown timeout: 10s.
+
+The lease must exceed publish timeout + store timeout. Shutdown timeout must
+also exceed that same per-event completion budget.
+
+## Retry and terminal failure
+
+Broker publish errors do not crash the service when the durable state transition
+succeeds.
+
+For a normal publish failure:
+
+1. if the attempt limit is not reached, the lease is released with exponential
+   retry delay capped by `OUTBOX_DISPATCH_RETRY_MAX_DELAY`;
+2. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
+
+If application shutdown cancels an in-flight publish, the dispatcher schedules a
+retry even when the attempt count is already at the configured limit. Shutdown
+cancellation makes the broker outcome ambiguous, so permanent failure would be
+unsafe.
+
+Storage/claim/settlement failures are different: the dispatcher returns a
+sanitized runtime error so the process lifecycle can stop rather than pretending
+durable state is still trustworthy.
+
 ## Settlement
 
 Settlement requires both row ID and current lease token.
@@ -74,29 +140,71 @@ Settlement requires both row ID and current lease token.
 - `Retry` clears the lease and moves `available_at`.
 - `MarkFailed` clears the lease and permanently stops automatic dispatch.
 
+Every dispatcher store operation is bounded by
+`OUTBOX_DISPATCH_STORE_TIMEOUT`.
+
 Settlement requires an unexpired lease as well as the matching token. A worker
 cannot settle after its lease expires, even before another dispatcher reclaims
 the row; a later claimant receives a fresh token.
 
 ## Delivery semantics
 
-The storage model is designed for **at-least-once** dispatch.
+The system is **at-least-once**.
 
 A process may publish successfully and crash before `MarkPublished`; the event
-can later be claimed again. The next dispatcher stage must therefore publish
-with the stable `event_id` as the transport deduplication ID and consumers must
-remain idempotent.
+can later be claimed again. The dispatcher therefore always publishes with the
+stable `event_id` as the transport deduplication ID and consumers must remain
+idempotent.
 
 JetStream duplicate windows reduce duplicate delivery but do not turn this into
 exactly-once semantics.
 
+## Application lifecycle
+
+The dispatcher is started only when:
+
+- `DATABASE_ENABLED=true`;
+- `NATS_ENABLED=true`;
+- `OUTBOX_DISPATCH_ENABLED=true`.
+
+Normal shutdown order is:
+
+1. stop/drain HTTP;
+2. cancel and wait for the outbox dispatcher within
+   `OUTBOX_DISPATCH_SHUTDOWN_TIMEOUT`;
+3. drain NATS;
+4. close PostgreSQL;
+5. flush/shut down telemetry.
+
+This keeps the broker and database alive while a claimed batch is being
+released, published, or settled.
+
+## Configuration
+
+```dotenv
+OUTBOX_DISPATCH_ENABLED=false
+OUTBOX_DISPATCH_BATCH_SIZE=8
+OUTBOX_DISPATCH_POLL_INTERVAL=500ms
+OUTBOX_DISPATCH_LEASE=30s
+OUTBOX_DISPATCH_MAX_ATTEMPTS=10
+OUTBOX_DISPATCH_RETRY_BASE_DELAY=1s
+OUTBOX_DISPATCH_RETRY_MAX_DELAY=1m
+OUTBOX_DISPATCH_PUBLISH_TIMEOUT=5s
+OUTBOX_DISPATCH_STORE_TIMEOUT=2s
+OUTBOX_DISPATCH_SHUTDOWN_TIMEOUT=10s
+```
+
+A disabled dispatcher ignores dispatcher-specific settings, matching the other
+optional profiles.
+
 ## Security
 
-Raw PostgreSQL errors are wrapped in operation-only errors so DSNs, SQL, and
-driver diagnostics do not enter ordinary logs.
+Raw PostgreSQL and broker errors are not copied into normal dispatcher error
+strings.
 
 Payloads and propagation values are never copied into infrastructure error
-strings.
+strings. Only `traceparent` and `tracestate` are durably persisted by the
+generic outbox.
 
 ## Integration tests
 
@@ -105,10 +213,20 @@ The PostgreSQL/Testcontainers suite verifies:
 - enqueue rollback with the caller transaction;
 - lease exclusion while a claim is active;
 - stale-token settlement rejection;
+- settlement rejection after lease expiry;
 - delayed retry and new claim tokens;
 - monotonic attempt count;
 - final publish settlement;
 - duplicate event IDs returning sanitized error text.
 
-The next stage should add the bounded dispatcher and application lifecycle
-wiring as a separate PR.
+The combined PostgreSQL + real JetStream integration verifies:
+
+- dispatch to the configured subject;
+- stable `Nats-Msg-Id` equal to `event_id`;
+- persisted trace context restoration;
+- successful PostgreSQL publish settlement;
+- bounded dispatcher shutdown.
+
+Unit tests additionally verify bounded claim contexts, concurrent batch
+dispatch, exponential retry capping, cancellation retry, and sanitized
+settlement failures.
