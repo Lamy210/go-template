@@ -77,8 +77,8 @@ func (c ClaimConfig) Validate() error {
 	if c.BatchSize > 1000 {
 		return errors.New("outbox claim batch size must not exceed 1000")
 	}
-	if c.Lease <= 0 {
-		return errors.New("outbox claim lease must be positive")
+	if c.Lease < time.Microsecond {
+		return errors.New("outbox claim lease must be at least one microsecond")
 	}
 	return nil
 }
