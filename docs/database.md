@@ -63,6 +63,8 @@ make generate-check
 Generated code is committed. CI regenerates it and fails when the committed
 output is stale.
 
+The example sqlc package enables `omit_unused_structs`, so platform tables that are not referenced by the example queries (such as the transactional outbox) do not leak into the removable example model package.
+
 SQL remains source code:
 
 - queries are named;
