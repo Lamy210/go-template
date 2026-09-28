@@ -33,8 +33,8 @@ type DispatcherConfig struct {
 
 // Validate rejects unbounded dispatcher behavior.
 func (c DispatcherConfig) Validate() error {
-	if c.BatchSize <= 0 || c.BatchSize > 1000 {
-		return errors.New("outbox dispatcher batch size must be between 1 and 1000")
+	if c.BatchSize <= 0 || c.BatchSize > 256 {
+		return errors.New("outbox dispatcher batch size must be between 1 and 256")
 	}
 	if c.PollInterval <= 0 {
 		return errors.New("outbox dispatcher poll interval must be positive")
@@ -120,18 +120,36 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			continue
 		}
 
-		for _, event := range events {
-			if err := d.dispatchOne(ctx, event); err != nil {
-				if ctx.Err() != nil {
-					return nil
-				}
-				return err
-			}
+		if err := d.dispatchBatch(ctx, events); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
+			return err
+		}
+		if ctx.Err() != nil {
+			return nil
 		}
 	}
+}
+
+func (d *Dispatcher) dispatchBatch(
+	ctx context.Context,
+	events []ClaimedEvent,
+) error {
+	results := make(chan error, len(events))
+	for _, event := range events {
+		go func(event ClaimedEvent) {
+			results <- d.dispatchOne(ctx, event)
+		}(event)
+	}
+
+	var firstErr error
+	for range events {
+		if err := <-results; err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error {
