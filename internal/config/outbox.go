@@ -13,8 +13,9 @@ const (
 	defaultOutboxMaxAttempts   = 10
 	defaultOutboxRetryBase     = time.Second
 	defaultOutboxRetryMax      = time.Minute
-	defaultOutboxPublishTimeout = 5 * time.Second
-	defaultOutboxShutdownTimeout = 10 * time.Second
+	defaultOutboxPublishTimeout    = 5 * time.Second
+	defaultOutboxSettlementTimeout = 2 * time.Second
+	defaultOutboxShutdownTimeout   = 10 * time.Second
 )
 
 // OutboxConfig controls the optional transactional-outbox dispatcher.
@@ -26,8 +27,9 @@ type OutboxConfig struct {
 	MaxAttempts     int
 	RetryBaseDelay  time.Duration
 	RetryMaxDelay   time.Duration
-	PublishTimeout  time.Duration
-	ShutdownTimeout time.Duration
+	PublishTimeout    time.Duration
+	SettlementTimeout time.Duration
+	ShutdownTimeout   time.Duration
 }
 
 func loadOutbox(lookup lookupEnv) (OutboxConfig, error) {
@@ -74,6 +76,14 @@ func loadOutbox(lookup lookupEnv) (OutboxConfig, error) {
 	if err != nil {
 		return OutboxConfig{}, err
 	}
+	settlementTimeout, err := durationValue(
+		lookup,
+		"OUTBOX_SETTLEMENT_TIMEOUT",
+		defaultOutboxSettlementTimeout,
+	)
+	if err != nil {
+		return OutboxConfig{}, err
+	}
 	shutdownTimeout, err := durationValue(
 		lookup,
 		"OUTBOX_SHUTDOWN_TIMEOUT",
@@ -90,6 +100,7 @@ func loadOutbox(lookup lookupEnv) (OutboxConfig, error) {
 	cfg.RetryBaseDelay = retryBase
 	cfg.RetryMaxDelay = retryMax
 	cfg.PublishTimeout = publishTimeout
+	cfg.SettlementTimeout = settlementTimeout
 	cfg.ShutdownTimeout = shutdownTimeout
 
 	if err := cfg.Validate(); err != nil {
@@ -107,8 +118,9 @@ func defaultOutboxConfig() OutboxConfig {
 		MaxAttempts:     defaultOutboxMaxAttempts,
 		RetryBaseDelay:  defaultOutboxRetryBase,
 		RetryMaxDelay:   defaultOutboxRetryMax,
-		PublishTimeout:  defaultOutboxPublishTimeout,
-		ShutdownTimeout: defaultOutboxShutdownTimeout,
+		PublishTimeout:    defaultOutboxPublishTimeout,
+		SettlementTimeout: defaultOutboxSettlementTimeout,
+		ShutdownTimeout:   defaultOutboxShutdownTimeout,
 	}
 }
 
@@ -141,8 +153,11 @@ func (c OutboxConfig) Validate() error {
 	if c.PublishTimeout <= 0 {
 		return fmt.Errorf("OUTBOX_PUBLISH_TIMEOUT must be positive")
 	}
-	if c.Lease <= c.PublishTimeout {
-		return fmt.Errorf("OUTBOX_LEASE must exceed OUTBOX_PUBLISH_TIMEOUT")
+	if c.SettlementTimeout <= 0 {
+		return fmt.Errorf("OUTBOX_SETTLEMENT_TIMEOUT must be positive")
+	}
+	if c.Lease <= c.PublishTimeout+c.SettlementTimeout {
+		return fmt.Errorf("OUTBOX_LEASE must exceed publish plus settlement timeouts")
 	}
 	if c.ShutdownTimeout <= 0 {
 		return fmt.Errorf("OUTBOX_SHUTDOWN_TIMEOUT must be positive")
