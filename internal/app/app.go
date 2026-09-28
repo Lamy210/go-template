@@ -221,14 +221,14 @@ func Run(ctx context.Context) error {
 			},
 			propagator,
 			outbox.DispatcherConfig{
-				BatchSize:         cfg.Outbox.BatchSize,
-				PollInterval:      cfg.Outbox.PollInterval,
-				Lease:             cfg.Outbox.Lease,
-				MaxAttempts:       cfg.Outbox.MaxAttempts,
-				RetryBaseDelay:    cfg.Outbox.RetryBaseDelay,
-				RetryMaxDelay:     cfg.Outbox.RetryMaxDelay,
-				PublishTimeout:    cfg.Outbox.PublishTimeout,
-				StoreTimeout: cfg.Outbox.StoreTimeout,
+				BatchSize:      cfg.Outbox.BatchSize,
+				PollInterval:   cfg.Outbox.PollInterval,
+				Lease:          cfg.Outbox.Lease,
+				MaxAttempts:    cfg.Outbox.MaxAttempts,
+				RetryBaseDelay: cfg.Outbox.RetryBaseDelay,
+				RetryMaxDelay:  cfg.Outbox.RetryMaxDelay,
+				PublishTimeout: cfg.Outbox.PublishTimeout,
+				StoreTimeout:   cfg.Outbox.StoreTimeout,
 			},
 		)
 		if err != nil {
