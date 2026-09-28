@@ -226,6 +226,56 @@ func TestDispatcherCancellationReleasesLeaseForRetry(t *testing.T) {
 	}
 }
 
+func TestDispatcherCancellationDoesNotHideSettlementFailure(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("database unavailable")
+	store := &fakeEventStore{
+		claims: [][]ClaimedEvent{{
+			{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token",
+			},
+		}},
+		settleErr: sentinel,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	dispatcher := mustDispatcher(t, store, func(context.Context, string, string, []byte) error {
+		cancel()
+		return context.Canceled
+	}, nil)
+
+	err := dispatcher.Run(ctx)
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Run() error = %v, want settlement failure", err)
+	}
+	if got := err.Error(); got != "release canceled outbox event" {
+		t.Fatalf("Run() error text = %q", got)
+	}
+}
+
+func TestDispatcherConfigRejectsOverflowingTimeoutBudget(t *testing.T) {
+	t.Parallel()
+
+	maxDuration := time.Duration(1<<63 - 1)
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          24 * time.Hour,
+		MaxAttempts:    1,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: maxDuration,
+		StoreTimeout:   maxDuration,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want overflowing budget error")
+	}
+}
+
 func TestDispatcherBoundsClaimWithStoreTimeout(t *testing.T) {
 	t.Parallel()
 
