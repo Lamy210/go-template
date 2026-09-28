@@ -115,7 +115,7 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 			RetryBaseDelay:    50 * time.Millisecond,
 			RetryMaxDelay:     200 * time.Millisecond,
 			PublishTimeout:    500 * time.Millisecond,
-			SettlementTimeout: 500 * time.Millisecond,
+			StoreTimeout: 500 * time.Millisecond,
 		},
 	)
 	if err != nil {
