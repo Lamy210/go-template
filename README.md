@@ -6,7 +6,7 @@ The design principle is: **small enough for a small service, structured enough f
 
 ## Current status
 
-The repository is being bootstrapped incrementally. Core/HTTP provides typed configuration, structured logging, transport-neutral application errors, safe HTTP error translation and panic recovery, build metadata, explicit server limits/timeouts, bounded graceful shutdown with forced close on deadline, Huma-generated OpenAPI, health probes, tests, Docker, and CI.
+The repository is being bootstrapped incrementally. Core/HTTP provides typed configuration, structured logging, transport-neutral application errors, safe HTTP error translation and panic recovery, build metadata, explicit server limits/timeouts, synchronous listener bind before background workers, bounded graceful shutdown with forced close on deadline, Huma-generated OpenAPI, health probes, tests, Docker, and CI.
 
 An optional PostgreSQL profile adds pgx/v5, sqlc, Atlas versioned migrations, bounded DB readiness and shutdown, explicit transaction boundaries, local Compose, fresh-database integration tests, and self-contained Testcontainers execution. It is disabled by default so DB-free services stay simple.
 

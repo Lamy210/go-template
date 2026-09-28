@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -160,7 +161,24 @@ func (s *Server) Handler() http.Handler {
 	return s.handler
 }
 
-// ListenAndServe starts the configured HTTP server.
+// Listen binds the configured TCP address synchronously. Composition roots can
+// use this to prove that the service owns its HTTP port before starting
+// background workers with external side effects.
+func (s *Server) Listen(ctx context.Context) (net.Listener, error) {
+	var listenConfig net.ListenConfig
+	return listenConfig.Listen(ctx, "tcp", s.httpServer.Addr)
+}
+
+// Serve starts the configured HTTP server on an already-bound listener.
+func (s *Server) Serve(listener net.Listener) error {
+	if listener == nil {
+		return errors.New("http listener must not be nil")
+	}
+	return s.httpServer.Serve(listener)
+}
+
+// ListenAndServe starts the configured HTTP server. Prefer Listen + Serve at
+// composition roots that must order background-worker startup after port bind.
 func (s *Server) ListenAndServe() error {
 	return s.httpServer.ListenAndServe()
 }

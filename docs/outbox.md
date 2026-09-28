@@ -167,7 +167,12 @@ The dispatcher is started only when:
 
 - `DATABASE_ENABLED=true`;
 - `NATS_ENABLED=true`;
-- `OUTBOX_DISPATCH_ENABLED=true`.
+- `OUTBOX_DISPATCH_ENABLED=true`;
+- the HTTP server is constructed and its configured TCP address has been bound
+  successfully.
+
+This ordering prevents an HTTP bind failure such as an already-used port from
+occurring after durable events have already started publishing.
 
 Normal shutdown order is:
 

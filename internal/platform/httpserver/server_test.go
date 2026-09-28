@@ -264,6 +264,78 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 }
 
+func TestListenBindsConfiguredAddress(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConfig()
+	cfg.Addr = "127.0.0.1:0"
+	server := newTestServer(
+		t,
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+
+	listener, err := server.Listen(context.Background())
+	if err != nil {
+		t.Fatalf("Listen() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+	})
+
+	if listener.Addr() == nil {
+		t.Fatal("Listen() returned listener without address")
+	}
+}
+
+func TestListenFailsSynchronouslyWhenAddressIsOccupied(t *testing.T) {
+	t.Parallel()
+
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("occupy address: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = occupied.Close()
+	})
+
+	cfg := testConfig()
+	cfg.Addr = occupied.Addr().String()
+	server := newTestServer(
+		t,
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+
+	listener, err := server.Listen(context.Background())
+	if listener != nil {
+		_ = listener.Close()
+	}
+	if err == nil {
+		t.Fatal("Listen() error = nil, want address-in-use error")
+	}
+}
+
+func TestServeRejectsNilListener(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(
+		t,
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+
+	if err := server.Serve(nil); err == nil {
+		t.Fatal("Serve(nil) error = nil, want error")
+	}
+}
+
 func TestShutdownForceClosesActiveConnectionsAfterDeadline(t *testing.T) {
 	t.Parallel()
 
