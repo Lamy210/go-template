@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultOutboxEnabled       = false
-	defaultOutboxBatchSize     = 16
+	defaultOutboxBatchSize     = 8
 	defaultOutboxPollInterval  = 500 * time.Millisecond
 	defaultOutboxLease         = 30 * time.Second
 	defaultOutboxMaxAttempts   = 10
@@ -159,8 +159,8 @@ func (c OutboxConfig) Validate() error {
 	if c.Lease <= c.PublishTimeout+c.SettlementTimeout {
 		return fmt.Errorf("OUTBOX_LEASE must exceed publish plus settlement timeouts")
 	}
-	if c.ShutdownTimeout <= 0 {
-		return fmt.Errorf("OUTBOX_SHUTDOWN_TIMEOUT must be positive")
+	if c.ShutdownTimeout <= c.PublishTimeout+c.SettlementTimeout {
+		return fmt.Errorf("OUTBOX_SHUTDOWN_TIMEOUT must exceed publish plus settlement timeouts")
 	}
 	return nil
 }
