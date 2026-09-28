@@ -26,10 +26,13 @@ Health and version endpoints are HTTP transport concerns, so their Huma registra
 
 The HTTP adapter also owns its transport-level configuration contract (listener
 address, request timeouts, and header/body limits). `internal/app` maps the
-environment-facing process config into that adapter config explicitly. Process
-shutdown budgeting remains at the composition root because it coordinates HTTP,
-messaging, telemetry, and database teardown rather than configuring
-`net/http.Server` itself.
+environment-facing process config into that adapter config explicitly. The
+composition root binds the configured TCP listener synchronously before starting
+background workers, so a bind failure cannot occur after an outbox dispatcher or
+another worker has already produced external side effects. Process shutdown
+budgeting remains at the composition root because it coordinates HTTP, messaging,
+telemetry, and database teardown rather than configuring `net/http.Server`
+itself.
 
 HTTP panic containment is also transport-owned. The adapter returns the same
 generic `internal_error` contract when a response has not started, logs only
