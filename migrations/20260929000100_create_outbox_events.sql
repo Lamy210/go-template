@@ -1,9 +1,5 @@
-CREATE TABLE example_items (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name TEXT NOT NULL CHECK (char_length(name) > 0),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
+-- create the generic transactional outbox used to atomically persist
+-- application state changes and future messaging work.
 CREATE TABLE outbox_events (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id TEXT NOT NULL UNIQUE

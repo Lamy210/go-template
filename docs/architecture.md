@@ -65,6 +65,7 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
 - Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
 - Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.
+- Outbox: `internal/platform/outbox`, caller-owned transactional enqueue plus PostgreSQL lease/settlement primitives. It is transport-neutral and does not import NATS.
 
 A profile must be removable without forcing unrelated application code to understand it. PostgreSQL, NATS, and telemetry therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
@@ -119,6 +120,21 @@ Telemetry is not a readiness dependency. Collector or backend failure may reduce
 Shutdown order is HTTP first, NATS second when enabled, PostgreSQL third when enabled, and telemetry last so completed work can be flushed before process exit. HTTP shutdown first attempts graceful drain within `HTTP_SHUTDOWN_TIMEOUT`; if that context expires, the adapter force-closes active HTTP connections before dependency teardown continues. PostgreSQL close is independently bounded by `DATABASE_SHUTDOWN_TIMEOUT` because pgxpool close itself is not context-aware.
 
 See [telemetry.md](telemetry.md).
+
+## Transactional outbox boundary
+
+The outbox storage primitive closes the database/message-intent atomicity gap
+without making PostgreSQL depend on NATS. Application use cases enqueue events
+inside their existing caller-owned transaction.
+
+Dispatch claiming uses `FOR UPDATE SKIP LOCKED`, commits the lease before
+external I/O, and settles by row ID + lease token. The resulting semantics are
+at-least-once; stable event IDs must be reused as broker deduplication IDs.
+
+Only `traceparent` and `tracestate` are persisted. Baggage is deliberately
+excluded from durable outbox metadata.
+
+See [outbox.md](outbox.md).
 
 ## Current bootstrap
 

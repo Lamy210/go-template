@@ -14,6 +14,8 @@ An optional NATS JetStream profile adds bounded connection/reconnect policy, exp
 
 An optional OpenTelemetry profile exports stable traces and metrics over OTLP/HTTP with bounded buffering, retry, export, and shutdown behavior. It is disabled by default and is deliberately non-critical to readiness.
 
+A PostgreSQL transactional outbox primitive supports atomic application-state + future-message persistence with lease-based multi-dispatcher claiming. The storage layer is transport-neutral; runtime dispatch is intentionally composed separately.
+
 ## Requirements
 
 - Go 1.27.x
@@ -144,6 +146,7 @@ internal/
     httpserver/            HTTP transport
     messaging/             NATS JetStream client/stream/consumer boundary
     telemetry/             OpenTelemetry traces/metrics boundary
+    outbox/                transactional outbox storage boundary
 migrations/                versioned Atlas migrations + atlas.sum
 sql/
   schema/                  desired SQL schema
@@ -156,6 +159,7 @@ docs/
   database.md
   messaging.md
   telemetry.md
+  outbox.md
   development.md
 ```
 

@@ -63,6 +63,8 @@ make generate-check
 Generated code is committed. CI regenerates it and fails when the committed
 output is stale.
 
+The example sqlc package enables `omit_unused_structs`, so platform tables that are not referenced by the example queries (such as the transactional outbox) do not leak into the removable example model package.
+
 SQL remains source code:
 
 - queries are named;
@@ -115,6 +117,17 @@ Integration tests verify that rollback occurs and that the original callback
 error remains discoverable through `errors.Is`. The helper also rejects a nil
 pool or nil transaction callback instead of allowing a panic at the common
 transaction boundary.
+
+## Transactional outbox
+
+`internal/platform/outbox` provides transport-neutral transactional event
+storage on PostgreSQL. `outbox.Enqueue` accepts the caller's `DBTX`, so a
+use case can write application state and the future message intent in one
+`database.InTx` transaction.
+
+Claiming uses lease tokens and `FOR UPDATE SKIP LOCKED` without holding the DB
+transaction open across broker I/O. See [outbox.md](outbox.md) for the storage
+and settlement contract.
 
 ## Readiness and shutdown
 

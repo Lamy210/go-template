@@ -60,6 +60,16 @@ durable/filter policy they own. This keeps the NATS profile reusable and
 prevents infrastructure code from becoming a business `worker` dumping
 ground.
 
+## Transactional outbox compatibility
+
+The PostgreSQL outbox storage layer is independent of NATS. Its stable
+application-supplied `event_id` is intended to be passed to
+`messaging.Client.Publish` as the JetStream message ID by the future dispatcher
+stage.
+
+Because dispatch is at-least-once, consumers must remain idempotent even when
+JetStream deduplication is enabled.
+
 ## Idempotent publishing
 
 `messaging.Client.Publish` accepts a stable message ID and maps it to
