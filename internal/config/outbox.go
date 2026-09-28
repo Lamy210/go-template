@@ -7,7 +7,7 @@ import (
 
 const (
 	defaultOutboxEnabled       = false
-	defaultOutboxBatchSize     = 100
+	defaultOutboxBatchSize     = 16
 	defaultOutboxPollInterval  = 500 * time.Millisecond
 	defaultOutboxLease         = 30 * time.Second
 	defaultOutboxMaxAttempts   = 10
@@ -129,8 +129,8 @@ func (c OutboxConfig) Validate() error {
 	if !c.Enabled {
 		return nil
 	}
-	if c.BatchSize <= 0 || c.BatchSize > 1000 {
-		return fmt.Errorf("OUTBOX_BATCH_SIZE must be between 1 and 1000")
+	if c.BatchSize <= 0 || c.BatchSize > 256 {
+		return fmt.Errorf("OUTBOX_BATCH_SIZE must be between 1 and 256")
 	}
 	if c.PollInterval <= 0 {
 		return fmt.Errorf("OUTBOX_POLL_INTERVAL must be positive")
