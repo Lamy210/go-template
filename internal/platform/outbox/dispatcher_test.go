@@ -14,6 +14,7 @@ type fakeEventStore struct {
 	mu        sync.Mutex
 	claims    [][]ClaimedEvent
 	claimErr  error
+	claimFn   func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
 	published []ClaimedEvent
 	retried   []retryCall
 	failed    []ClaimedEvent
@@ -25,7 +26,10 @@ type retryCall struct {
 	delay time.Duration
 }
 
-func (s *fakeEventStore) Claim(context.Context, ClaimConfig) ([]ClaimedEvent, error) {
+func (s *fakeEventStore) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, error) {
+	if s.claimFn != nil {
+		return s.claimFn(ctx, cfg)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.claimErr != nil {
@@ -222,6 +226,38 @@ func TestDispatcherCancellationReleasesLeaseForRetry(t *testing.T) {
 	}
 }
 
+func TestDispatcherBoundsClaimWithStoreTimeout(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("claim stopped")
+	store := &fakeEventStore{
+		claimFn: func(ctx context.Context, _ ClaimConfig) ([]ClaimedEvent, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("Claim() context has no deadline")
+			}
+			if remaining := time.Until(deadline); remaining <= 0 || remaining > 2*time.Second {
+				t.Fatalf("Claim() deadline remaining = %v, want bounded positive duration", remaining)
+			}
+			return nil, sentinel
+		},
+	}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error { return nil },
+		nil,
+	)
+
+	err := dispatcher.Run(context.Background())
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Run() error = %v, want wrapped sentinel", err)
+	}
+	if got := err.Error(); got != "claim outbox dispatch batch" {
+		t.Fatalf("Run() error text = %q", got)
+	}
+}
+
 func TestDispatcherReturnsStorageFailure(t *testing.T) {
 	t.Parallel()
 
@@ -283,7 +319,7 @@ func mustDispatcher(
 			RetryBaseDelay:    time.Second,
 			RetryMaxDelay:     time.Minute,
 			PublishTimeout:    time.Second,
-			SettlementTimeout: time.Second,
+			StoreTimeout: time.Second,
 		},
 	)
 	if err != nil {
