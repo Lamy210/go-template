@@ -22,6 +22,7 @@ const (
 	maxPayloadBytes   = 1 << 20
 	maxTraceparentLen = 256
 	maxTracestateLen  = 512
+	maxClaimLease     = 24 * time.Hour
 )
 
 // DBTX is the minimal pgx boundary needed by transactional enqueue.
@@ -79,6 +80,9 @@ func (c ClaimConfig) Validate() error {
 	}
 	if c.Lease < time.Microsecond {
 		return errors.New("outbox claim lease must be at least one microsecond")
+	}
+	if c.Lease > maxClaimLease {
+		return errors.New("outbox claim lease must not exceed 24 hours")
 	}
 	return nil
 }
