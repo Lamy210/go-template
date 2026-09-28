@@ -116,6 +116,17 @@ error remains discoverable through `errors.Is`. The helper also rejects a nil
 pool or nil transaction callback instead of allowing a panic at the common
 transaction boundary.
 
+## Transactional outbox
+
+`internal/platform/outbox` provides transport-neutral transactional event
+storage on PostgreSQL. `outbox.Enqueue` accepts the caller's `DBTX`, so a
+use case can write application state and the future message intent in one
+`database.InTx` transaction.
+
+Claiming uses lease tokens and `FOR UPDATE SKIP LOCKED` without holding the DB
+transaction open across broker I/O. See [outbox.md](outbox.md) for the storage
+and settlement contract.
+
 ## Readiness and shutdown
 
 When the profile is enabled:
