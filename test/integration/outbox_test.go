@@ -156,6 +156,61 @@ func TestTransactionalOutboxLifecycle(t *testing.T) {
 	}
 }
 
+func TestOutboxExpiredLeaseCannotSettle(t *testing.T) {
+	pool, ctx := openTestPool(t)
+
+	const eventID = "expired-lease-event"
+	if _, err := pool.Exec(ctx, "DELETE FROM outbox_events WHERE event_id = $1", eventID); err != nil {
+		t.Fatalf("clear expired lease event: %v", err)
+	}
+	if err := outbox.Enqueue(
+		ctx,
+		pool,
+		outbox.Event{
+			ID:      eventID,
+			Subject: "example.expired",
+			Payload: []byte("payload"),
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("enqueue expired lease event: %v", err)
+	}
+
+	store, err := outbox.NewStore(pool)
+	if err != nil {
+		t.Fatalf("new outbox store: %v", err)
+	}
+	claimed, err := store.Claim(ctx, outbox.ClaimConfig{
+		BatchSize: 1,
+		Lease:     50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("claim expired lease event: %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("claimed events = %d, want 1", len(claimed))
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	if err := store.MarkPublished(ctx, claimed[0]); err == nil {
+		t.Fatal("MarkPublished() succeeded after lease expiry")
+	}
+
+	reclaimed, err := store.Claim(ctx, outbox.ClaimConfig{
+		BatchSize: 1,
+		Lease:     time.Second,
+	})
+	if err != nil {
+		t.Fatalf("reclaim expired lease event: %v", err)
+	}
+	if len(reclaimed) != 1 {
+		t.Fatalf("reclaimed events = %d, want 1", len(reclaimed))
+	}
+	if reclaimed[0].LockToken == claimed[0].LockToken {
+		t.Fatal("reclaimed event reused expired lock token")
+	}
+}
+
 func TestOutboxDuplicateEventIDIsSanitized(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
