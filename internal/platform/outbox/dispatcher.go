@@ -28,7 +28,7 @@ type DispatcherConfig struct {
 	RetryBaseDelay    time.Duration
 	RetryMaxDelay     time.Duration
 	PublishTimeout    time.Duration
-	SettlementTimeout time.Duration
+	StoreTimeout time.Duration
 }
 
 // Validate rejects unbounded dispatcher behavior.
@@ -51,11 +51,11 @@ func (c DispatcherConfig) Validate() error {
 	if c.RetryMaxDelay < c.RetryBaseDelay || c.RetryMaxDelay > maxClaimLease {
 		return errors.New("outbox dispatcher retry max delay is outside allowed bounds")
 	}
-	if c.PublishTimeout <= 0 || c.SettlementTimeout <= 0 {
-		return errors.New("outbox dispatcher operation timeouts must be positive")
+	if c.PublishTimeout <= 0 || c.StoreTimeout <= 0 {
+		return errors.New("outbox dispatcher publish and store timeouts must be positive")
 	}
-	if c.Lease <= c.PublishTimeout+c.SettlementTimeout {
-		return errors.New("outbox dispatcher lease must exceed publish plus settlement timeouts")
+	if c.Lease <= c.PublishTimeout+c.StoreTimeout {
+		return errors.New("outbox dispatcher lease must exceed publish plus store timeouts")
 	}
 	return nil
 }
@@ -102,10 +102,12 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			return nil
 		}
 
-		events, err := d.store.Claim(ctx, ClaimConfig{
+		claimCtx, cancelClaim := context.WithTimeout(ctx, d.cfg.StoreTimeout)
+		events, err := d.store.Claim(claimCtx, ClaimConfig{
 			BatchSize: d.cfg.BatchSize,
 			Lease:     d.cfg.Lease,
 		})
+		cancelClaim()
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -159,7 +161,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 	cancelPublish()
 
 	settleBase := context.WithoutCancel(ctx)
-	settleCtx, cancelSettle := context.WithTimeout(settleBase, d.cfg.SettlementTimeout)
+	settleCtx, cancelSettle := context.WithTimeout(settleBase, d.cfg.StoreTimeout)
 	defer cancelSettle()
 
 	if err == nil {
