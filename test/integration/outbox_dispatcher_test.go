@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -155,7 +154,7 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 	if got := string(msg.Data); got != "outbox-payload" {
 		t.Fatalf("message payload = %q", got)
 	}
-	if got := msg.Header.Get("Nats-Msg-Id"); got != eventID {
+	if got := msg.Header.Get(nats.MsgIdHdr); got != eventID {
 		t.Fatalf("Nats-Msg-Id = %q, want %q", got, eventID)
 	}
 	if got := msg.Header.Get("traceparent"); got != traceparent {
@@ -200,6 +199,6 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 			t.Fatalf("dispatcher shutdown: %v", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal(fmt.Sprintf("dispatcher did not stop within %s", 2*time.Second))
+		t.Fatalf("dispatcher did not stop within %s", 2*time.Second)
 	}
 }
