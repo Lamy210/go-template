@@ -105,7 +105,7 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 		return nil, newOperationError("begin outbox claim transaction", err)
 	}
 	defer func() {
-		_ = tx.Rollback(context.Background())
+		_ = tx.Rollback(ctx)
 	}()
 
 	rows, err := tx.Query(ctx, claimSQL, cfg.BatchSize, durationInterval(cfg.Lease), token)
@@ -147,8 +147,8 @@ func (s *Store) MarkPublished(ctx context.Context, event ClaimedEvent) error {
 
 // Retry releases a claim and schedules another attempt after delay.
 func (s *Store) Retry(ctx context.Context, event ClaimedEvent, delay time.Duration) error {
-	if delay <= 0 {
-		return errors.New("outbox retry delay must be positive")
+	if delay < time.Microsecond {
+		return errors.New("outbox retry delay must be at least one microsecond")
 	}
 	return s.transition(
 		ctx,
