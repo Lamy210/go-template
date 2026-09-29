@@ -114,6 +114,9 @@ func New(
 	var handler http.Handler = router
 	for i := len(options.outerMiddleware) - 1; i >= 0; i-- {
 		handler = options.outerMiddleware[i](handler)
+		if handler == nil {
+			return nil, errors.New("http outer middleware must not return nil handler")
+		}
 	}
 
 	return &Server{
