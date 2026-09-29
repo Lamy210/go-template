@@ -16,6 +16,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -107,6 +108,7 @@ jobs:
 
   database:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
@@ -206,6 +208,7 @@ jobs:
 
   testcontainers:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -230,6 +233,7 @@ jobs:
 
   messaging:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       NATS_URL: nats://127.0.0.1:4222
       NATS_IMAGE: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
@@ -272,6 +276,7 @@ jobs:
 
   outbox:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       NATS_URL: nats://127.0.0.1:4222
       NATS_IMAGE: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
