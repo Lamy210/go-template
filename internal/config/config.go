@@ -52,7 +52,6 @@ func Load() (Config, error) {
 	return load(os.LookupEnv)
 }
 
-
 func load(lookup lookupEnv) (Config, error) {
 	readHeaderTimeout, err := durationValue(lookup, "HTTP_READ_HEADER_TIMEOUT", defaultReadHeaderTimeout)
 	if err != nil {
