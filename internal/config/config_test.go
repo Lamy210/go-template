@@ -314,6 +314,24 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "filter wildcard captures quarantine",
+			mutate: func(cfg *NATSConfig) {
+				cfg.FilterSubject = "app.events.>"
+			},
+		},
+		{
+			name: "quarantine subject contains wildcard",
+			mutate: func(cfg *NATSConfig) {
+				cfg.QuarantineSubject = "app.events.*"
+			},
+		},
+		{
+			name: "invalid stream subject pattern",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Subjects = []string{"app.events.>.invalid"}
+			},
+		},
+		{
 			name: "pull expiry below library minimum",
 			mutate: func(cfg *NATSConfig) {
 				cfg.PullExpiry = 500 * time.Millisecond
