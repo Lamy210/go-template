@@ -4,9 +4,12 @@ package messaging
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -24,10 +27,10 @@ type ClientConfig struct {
 
 // Validate rejects unbounded reconnects and missing connection limits.
 func (c ClientConfig) Validate() error {
-	if c.URL == "" {
+	if strings.TrimSpace(c.URL) == "" {
 		return errors.New("nats URL must not be empty")
 	}
-	if c.Name == "" {
+	if strings.TrimSpace(c.Name) == "" {
 		return errors.New("nats client name must not be empty")
 	}
 	if c.ConnectTimeout <= 0 || c.ReconnectWait <= 0 || c.DrainTimeout <= 0 || c.RequestTimeout <= 0 {
@@ -131,6 +134,10 @@ func (c *Client) Publish(
 	msgID string,
 	payload []byte,
 ) (PublishAck, error) {
+	if err := natssubject.ValidateLiteral(subject); err != nil {
+		return PublishAck{}, fmt.Errorf("nats publish subject is invalid: %w", err)
+	}
+
 	msg := nats.NewMsg(subject)
 	msg.Data = payload
 
@@ -192,6 +199,12 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 	return func(ctx context.Context) error {
 		if err := streamConfig.Validate(); err != nil {
 			return err
+		}
+		if timeout <= 0 {
+			return errors.New("nats readiness timeout must be positive")
+		}
+		if c == nil || c.conn == nil {
+			return errors.New("nats client must be initialized")
 		}
 		if c.conn.Status() != nats.CONNECTED {
 			return newOperationError("nats connection is not ready", errors.New("connection not connected"))

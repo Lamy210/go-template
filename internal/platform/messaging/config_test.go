@@ -7,6 +7,49 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+func TestClientConfigRejectsBlankConnectionIdentity(t *testing.T) {
+	t.Parallel()
+
+	base := ClientConfig{
+		URL:            "nats://127.0.0.1:4222",
+		Name:           "test",
+		ConnectTimeout: time.Second,
+		ReconnectWait:  time.Second,
+		MaxReconnects:  1,
+		DrainTimeout:   time.Second,
+		RequestTimeout: time.Second,
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*ClientConfig)
+	}{
+		{
+			name: "blank URL",
+			mutate: func(cfg *ClientConfig) {
+				cfg.URL = " 	 "
+			},
+		},
+		{
+			name: "blank name",
+			mutate: func(cfg *ClientConfig) {
+				cfg.Name = "\n"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := base
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want blank-value error")
+			}
+		})
+	}
+}
+
 func TestClientConfigRejectsUnlimitedReconnects(t *testing.T) {
 	t.Parallel()
 
