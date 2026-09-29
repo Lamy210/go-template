@@ -510,9 +510,9 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	}
 
 	err = client.EnsureStream(ctx, stream)
-	if !errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+	if !errors.Is(err, messaging.ErrStreamConfigDrift) {
 		t.Fatalf(
-			"EnsureStream() drift error = %v, want jetstream.ErrStreamNameAlreadyInUse",
+			"EnsureStream() drift error = %v, want messaging.ErrStreamConfigDrift",
 			err,
 		)
 	}
