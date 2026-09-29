@@ -185,3 +185,12 @@ The current increments provide:
 - optional transactional outbox dispatch with bounded claiming, concurrent publish, finite retry, and lifecycle wiring;
 - unit, transport, database/Testcontainers, messaging, outbox, and telemetry export tests;
 - Docker and CI quality gates.
+
+
+## Outbox timing invariant
+
+The outbox lease covers the entire bounded path from claim through broker
+publish and durable settlement: one store timeout for claim, one publish
+timeout, and one store timeout for settlement. The shared stdlib-only
+`internal/outboxbudget` policy is used by both configuration validation and the
+runtime dispatcher so those boundaries cannot drift independently.

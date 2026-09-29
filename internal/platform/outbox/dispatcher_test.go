@@ -397,6 +397,24 @@ func TestDispatcherConfigRejectsSubMicrosecondRetryDelay(t *testing.T) {
 	}
 }
 
+func TestDispatcherConfigRejectsLeaseWithoutClaimBudget(t *testing.T) {
+	t.Parallel()
+
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          2*time.Second + time.Nanosecond,
+		MaxAttempts:    1,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: time.Second,
+		StoreTimeout:   time.Second,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want claim+publish+settlement budget error")
+	}
+}
+
 func TestDispatcherConfigRejectsOverflowingTimeoutBudget(t *testing.T) {
 	t.Parallel()
 

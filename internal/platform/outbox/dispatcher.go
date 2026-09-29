@@ -6,6 +6,7 @@ import (
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/Lamy210/go-template/internal/outboxbudget"
 )
 
 // EventStore is the storage boundary required by the dispatcher.
@@ -56,9 +57,14 @@ func (c DispatcherConfig) Validate() error {
 	if c.PublishTimeout <= 0 || c.StoreTimeout <= 0 {
 		return errors.New("outbox dispatcher publish and store timeouts must be positive")
 	}
-	if c.Lease <= c.PublishTimeout ||
-		c.StoreTimeout >= c.Lease-c.PublishTimeout {
-		return errors.New("outbox dispatcher lease must exceed publish plus store timeouts")
+	if !outboxbudget.LeaseCoversClaimPublishSettlement(
+		c.Lease,
+		c.PublishTimeout,
+		c.StoreTimeout,
+	) {
+		return errors.New(
+			"outbox dispatcher lease must exceed claim store plus publish plus settlement store timeouts",
+		)
 	}
 	return nil
 }

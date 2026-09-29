@@ -116,8 +116,16 @@ The default dispatcher bounds are:
 - store operation timeout: 2s;
 - shutdown timeout: 10s.
 
-The lease must exceed publish timeout + store timeout. Shutdown timeout must
-also exceed that same per-event completion budget.
+The lease must strictly exceed the full claim-to-settlement budget:
+
+- one store timeout for the claim transaction;
+- one publish timeout;
+- one store timeout for settlement.
+
+The lease starts while the claim transaction is executing, so omitting claim
+time can leave too little lease remaining for a bounded publish plus settlement.
+Shutdown timeout is different: shutdown only needs to finish work that is
+already claimed, so it must strictly exceed publish timeout + one store timeout.
 
 ## Retry and terminal failure
 
@@ -246,6 +254,7 @@ The combined PostgreSQL + real JetStream integration verifies:
 - successful PostgreSQL publish settlement;
 - bounded dispatcher shutdown.
 
-Unit tests additionally verify bounded claim contexts, concurrent batch
-dispatch, sibling cancellation after fatal settlement failure, exponential
-retry capping, cancellation retry, and sanitized settlement failures.
+Unit tests additionally verify bounded claim contexts, strict claim/publish/
+settlement lease budgeting, concurrent batch dispatch, sibling cancellation
+after fatal settlement failure, exponential retry capping, cancellation retry,
+and sanitized settlement failures.
