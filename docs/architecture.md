@@ -83,6 +83,8 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 
 A profile must be removable without forcing unrelated application code to understand it. PostgreSQL, NATS, and telemetry therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
+Environment scalar parsing shared by multiple profiles lives in `internal/config/values.go`. A profile-specific config file must not own helpers required by unrelated profiles; removing an optional profile should not remove another profile's configuration primitives.
+
 ## PostgreSQL boundaries
 
 The application composition root owns the pgx pool lifecycle. The database adapter owns pool configuration and bounded readiness checks. Use cases own transaction boundaries via `database.InTx`; repositories do not silently begin transactions.

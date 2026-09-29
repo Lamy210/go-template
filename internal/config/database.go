@@ -152,18 +152,6 @@ func (c DatabaseConfig) Validate() error {
 	return nil
 }
 
-func boolValue(lookup lookupEnv, key string, fallback bool) (bool, error) {
-	value, ok := lookup(key)
-	if !ok {
-		return fallback, nil
-	}
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		return false, fmt.Errorf("parse %s: %w", key, err)
-	}
-	return parsed, nil
-}
-
 func int32Value(lookup lookupEnv, key string, fallback int32) (int32, error) {
 	value, ok := lookup(key)
 	if !ok {
