@@ -57,7 +57,7 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
 
-`HTTP_DOCS_ENABLED=true` preserves the development-friendly default Huma documentation surface. Set it to `false` when the service should not expose the built-in Docs UI, OpenAPI documents, or JSON Schema routes. Disabling the surface also disables Huma's response schema-link transformer so normal API responses do not retain broken or hidden schema links.
+`HTTP_DOCS_ENABLED=true` preserves the development-friendly default Huma documentation surface. Set it to `false` when the service should not expose the built-in Docs UI, OpenAPI documents, or JSON Schema routes. The template disables Huma's response schema-link transformer regardless of this setting, so normal API responses do not gain `$schema` fields or schema `Link` headers derived from request/forwarded host metadata.
 
 ## PostgreSQL profile
 
