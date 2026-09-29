@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -265,5 +266,46 @@ func TestValidateRejectsUnsafeLimits(t *testing.T) {
 
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want error")
+	}
+}
+
+func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*NATSConfig)
+	}{
+		{
+			name: "filter equals quarantine",
+			mutate: func(cfg *NATSConfig) {
+				cfg.FilterSubject = cfg.QuarantineSubject
+			},
+		},
+		{
+			name: "pull expiry below library minimum",
+			mutate: func(cfg *NATSConfig) {
+				cfg.PullExpiry = 500 * time.Millisecond
+			},
+		},
+		{
+			name: "delivery attempt overflow",
+			mutate: func(cfg *NATSConfig) {
+				cfg.ProcessAttempts = math.MaxInt
+				cfg.QuarantineAttempts = 1
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := defaultNATSConfig()
+			cfg.Enabled = true
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want runtime-parity error")
+			}
+		})
 	}
 }
