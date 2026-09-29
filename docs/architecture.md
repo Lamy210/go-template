@@ -36,9 +36,14 @@ telemetry, and database teardown rather than configuring `net/http.Server`
 itself.
 
 The built-in Huma documentation surface is explicitly controllable. When it is
-disabled, the adapter leaves Docs UI, OpenAPI, and schema routes unregistered and
-also removes Huma's default schema-link CreateHook so ordinary responses do not
-advertise unreachable schema URLs.
+disabled, the adapter leaves Docs UI, OpenAPI, and schema routes unregistered.
+
+The adapter also removes Huma v2.39.1's default schema-link CreateHook regardless
+of documentation exposure. The hook mutates ordinary response bodies with a
+`$schema` field and derives its absolute URL from request/forwarded host
+metadata. This template does not define a trusted-proxy boundary, so response
+contracts remain independent of `X-Forwarded-Host` / `Forwarded`; schemas are
+available only through the explicit documentation routes when enabled.
 
 HTTP panic containment is also transport-owned. The adapter returns the same
 generic `internal_error` contract when a response has not started, logs only
