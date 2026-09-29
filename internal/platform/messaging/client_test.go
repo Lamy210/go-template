@@ -11,7 +11,7 @@ func TestPublicClientMethodsRejectUninitializedClient(t *testing.T) {
 
 	stream := testConsumerConfig().Stream
 	consumer := testConsumerConfig()
-	clients := []*Client{nil, &Client{}}
+	clients := []*Client{nil, {}}
 
 	for _, client := range clients {
 		if _, err := client.Publish(
