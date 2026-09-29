@@ -61,6 +61,9 @@ jobs:
             --build-arg BUILD_DATE=unknown \
             --tag go-template:ci .
 
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
       - name: Lint
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 

@@ -19,7 +19,7 @@ A PostgreSQL transactional outbox supports atomic application-state + future-mes
 ## Requirements
 
 - Go 1.27.x
-- Docker (optional for the application; used by local PostgreSQL/NATS and integration workflows)
+- Docker (optional for the application; used by local PostgreSQL/NATS and integration workflows; local Compose ports bind to 127.0.0.1 by default)
 - sqlc / Atlas CLI only when working on the PostgreSQL profile locally
 
 ## Quick start
