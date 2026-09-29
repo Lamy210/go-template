@@ -397,7 +397,6 @@ func TestDispatcherConfigRejectsSubMicrosecondRetryDelay(t *testing.T) {
 	}
 }
 
-
 func TestDispatcherConfigRejectsLeaseWithoutClaimBudget(t *testing.T) {
 	t.Parallel()
 
