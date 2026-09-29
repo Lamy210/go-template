@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 
-	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
 )
 
@@ -93,8 +92,9 @@ func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header
 	}
 
 	target := natsHeaderCarrier{header: header}
-	for _, key := range natsHeaderCarrier{header: staged}.Keys() {
-		target.Set(key, staged.Get(key))
+	stagedCarrier := natsHeaderCarrier{header: staged}
+	for _, key := range stagedCarrier.Keys() {
+		target.Set(key, stagedCarrier.Get(key))
 	}
 }
 
@@ -119,17 +119,3 @@ func (c *Client) extractPropagationSafely(
 	return result
 }
 
-var _ coreprop.TextMapPropagator = (*safePropagationCompileCheck)(nil)
-
-// safePropagationCompileCheck exists only to keep the adapter-facing method
-// contract compile-checked without importing telemetry into messaging.
-type safePropagationCompileCheck struct{}
-
-func (*safePropagationCompileCheck) Inject(context.Context, coreprop.TextMapCarrier) {}
-
-func (*safePropagationCompileCheck) Extract(
-	ctx context.Context,
-	_ coreprop.TextMapCarrier,
-) context.Context {
-	return ctx
-}
