@@ -226,7 +226,7 @@ jobs:
           exit 1
 
       - name: Run messaging integration tests
-        run: go test -tags=messaging ./internal/platform/messaging
+        run: make test-messaging
 
       - name: Stop NATS
         if: always()
@@ -272,9 +272,7 @@ jobs:
           exit 1
 
       - name: Run transactional outbox integration
-        run: |
-          cd test/integration
-          go test -run '^TestOutboxDispatcherPublishesToJetStream$' ./...
+        run: make test-outbox
 
       - name: Stop NATS
         if: always()
