@@ -123,6 +123,14 @@ only receive a standard `context.Context`.
 When telemetry is disabled, no propagator is installed and messaging behavior is
 otherwise unchanged.
 
+Propagation and tracing integrations are non-critical observability hooks.
+Panics from propagator injection/extraction, tracing start, or tracing completion
+are contained at the messaging adapter boundary. Publishing, handler execution,
+retry/quarantine, and acknowledgement continue using the original context when
+an observability hook fails. Propagation injection is staged in a temporary
+header map so a panicking hook cannot leave partially written trace headers on
+an outbound message.
+
 Propagation headers are part of the persisted message metadata. Do not put
 credentials, access tokens, personal data, or unbounded/high-cardinality values
 in OpenTelemetry Baggage. Treat Baggage as broker-visible metadata and keep it

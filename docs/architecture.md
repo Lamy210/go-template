@@ -119,6 +119,12 @@ Telemetry satisfies that interface structurally, so NATS publishing/processing
 can create spans without introducing an OpenTelemetry dependency into the
 messaging adapter.
 
+Messaging observability hooks follow the same availability policy as HTTP
+observability hooks: they fail open. Propagator/tracer panics are contained,
+their panic values are discarded, and the broker/handler/settlement path
+continues. Propagation injection is staged so a failed hook cannot partially
+mutate outbound NATS headers.
+
 See [messaging.md](messaging.md).
 
 ## Telemetry boundaries
