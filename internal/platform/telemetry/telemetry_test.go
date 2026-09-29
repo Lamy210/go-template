@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,6 +39,16 @@ func TestConfigRejectsRetryBeyondExportDeadline(t *testing.T) {
 	cfg.RetryMaxElapsedTime = cfg.ExportTimeout + time.Second
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want retry deadline error")
+	}
+}
+
+func TestConfigRejectsNonFiniteSampleRatio(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConfig()
+	cfg.TraceSampleRatio = math.NaN()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want non-finite sample ratio error")
 	}
 }
 
