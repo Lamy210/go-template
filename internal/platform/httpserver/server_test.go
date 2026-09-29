@@ -655,16 +655,16 @@ func TestAccessLogNormalizesUnknownMethod(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	router := chi.NewRouter()
 	router.Use(accessLog(logger, nil, nil))
-	router.Method(rawMethod, "/custom", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	router.Get("/custom", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	}))
+	})
 
 	req := httptest.NewRequest(rawMethod, "/custom", nil)
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 
-	if res.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	if res.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusMethodNotAllowed)
 	}
 
 	var entry map[string]any
