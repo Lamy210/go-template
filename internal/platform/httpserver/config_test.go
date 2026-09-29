@@ -3,6 +3,7 @@ package httpserver
 import (
 	"io"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -85,6 +86,16 @@ func TestNewRejectsInvalidBoundaryInputs(t *testing.T) {
 
 	if _, err := New(testConfig(), nil, testServiceInfo(), nil); err == nil {
 		t.Fatal("New() nil logger error = nil")
+	}
+
+	if _, err := New(
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithOuterMiddleware(func(http.Handler) http.Handler { return nil }),
+	); err == nil {
+		t.Fatal("New() nil outer middleware output error = nil")
 	}
 }
 
