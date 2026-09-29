@@ -9,6 +9,7 @@ import (
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/Lamy210/go-template/internal/messageid"
 	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -150,6 +151,11 @@ func (c *Client) Publish(
 ) (PublishAck, error) {
 	if err := natssubject.ValidateLiteral(subject); err != nil {
 		return PublishAck{}, fmt.Errorf("nats publish subject is invalid: %w", err)
+	}
+	if msgID != "" {
+		if err := messageid.Validate(msgID); err != nil {
+			return PublishAck{}, fmt.Errorf("nats message ID is invalid: %w", err)
+		}
 	}
 	if err := c.validateInitialized(); err != nil {
 		return PublishAck{}, err

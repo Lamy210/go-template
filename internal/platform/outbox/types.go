@@ -13,6 +13,7 @@ import (
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/Lamy210/go-template/internal/messageid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -59,8 +60,11 @@ type ClaimConfig struct {
 
 // Validate enforces bounded event payload/metadata before touching PostgreSQL.
 func (e Event) Validate() error {
-	if strings.TrimSpace(e.ID) == "" || len(e.ID) > maxEventIDBytes {
+	if len(e.ID) == 0 || len(e.ID) > maxEventIDBytes {
 		return fmt.Errorf("outbox event ID must contain 1-%d bytes", maxEventIDBytes)
+	}
+	if err := messageid.Validate(e.ID); err != nil {
+		return fmt.Errorf("outbox event ID is invalid: %w", err)
 	}
 	if strings.TrimSpace(e.Subject) == "" || len(e.Subject) > maxSubjectBytes {
 		return fmt.Errorf("outbox subject must contain 1-%d bytes", maxSubjectBytes)
