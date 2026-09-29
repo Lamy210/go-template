@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"github.com/Lamy210/go-template/internal/outboxbudget"
 )
 
 const (
@@ -188,14 +190,20 @@ func (c OutboxConfig) Validate() error {
 	if c.StoreTimeout <= 0 {
 		return fmt.Errorf("OUTBOX_DISPATCH_STORE_TIMEOUT must be positive")
 	}
-	if c.Lease <= c.PublishTimeout ||
-		c.StoreTimeout >= c.Lease-c.PublishTimeout {
+	if !outboxbudget.LeaseCoversClaimPublishSettlement(
+		c.Lease,
+		c.PublishTimeout,
+		c.StoreTimeout,
+	) {
 		return fmt.Errorf(
-			"OUTBOX_DISPATCH_LEASE must exceed publish plus store timeouts",
+			"OUTBOX_DISPATCH_LEASE must exceed claim store plus publish plus settlement store timeouts",
 		)
 	}
-	if c.ShutdownTimeout <= c.PublishTimeout ||
-		c.StoreTimeout >= c.ShutdownTimeout-c.PublishTimeout {
+	if !outboxbudget.ShutdownCoversPublishSettlement(
+		c.ShutdownTimeout,
+		c.PublishTimeout,
+		c.StoreTimeout,
+	) {
 		return fmt.Errorf(
 			"OUTBOX_DISPATCH_SHUTDOWN_TIMEOUT must exceed publish plus store timeouts",
 		)
