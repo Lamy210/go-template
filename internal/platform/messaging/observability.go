@@ -1,0 +1,135 @@
+package messaging
+
+import (
+	"context"
+
+	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/nats-io/nats.go"
+)
+
+type operationStarter func(context.Context, string) (context.Context, func(error))
+
+func (c *Client) startPublishOperationSafely(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	if c == nil || c.tracer == nil {
+		return ctx, func(error) {}
+	}
+	return startOperationSafely(ctx, destination, c.tracer.StartPublish)
+}
+
+func (c *Client) startProcessOperationSafely(
+	ctx context.Context,
+	destination string,
+) (context.Context, func(error)) {
+	if c == nil || c.tracer == nil {
+		return ctx, func(error) {}
+	}
+	return startOperationSafely(ctx, destination, c.tracer.StartProcess)
+}
+
+func startOperationSafely(
+	ctx context.Context,
+	destination string,
+	start operationStarter,
+) (operationCtx context.Context, end func(error)) {
+	operationCtx = ctx
+	end = func(error) {}
+	if start == nil {
+		return operationCtx, end
+	}
+
+	defer func() {
+		if recover() == nil {
+			return
+		}
+		operationCtx = ctx
+		end = func(error) {}
+	}()
+
+	startedCtx, finish := start(ctx, destination)
+	if startedCtx != nil {
+		operationCtx = startedCtx
+	}
+	if finish != nil {
+		end = func(err error) {
+			finishOperationSafely(finish, err)
+		}
+	}
+	return operationCtx, end
+}
+
+func finishOperationSafely(finish func(error), err error) {
+	if finish == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	finish(err)
+}
+
+func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header) {
+	if c == nil || c.propagator == nil {
+		return
+	}
+
+	// Stage propagation writes so a hook panic cannot leave a partially mutated
+	// outbound header set.
+	staged := nats.Header{}
+	ok := false
+	func() {
+		defer func() {
+			if recover() != nil {
+				return
+			}
+			ok = true
+		}()
+		c.propagator.Inject(ctx, natsHeaderCarrier{header: staged})
+	}()
+	if !ok {
+		return
+	}
+
+	target := natsHeaderCarrier{header: header}
+	for _, key := range natsHeaderCarrier{header: staged}.Keys() {
+		target.Set(key, staged.Get(key))
+	}
+}
+
+func (c *Client) extractPropagationSafely(
+	ctx context.Context,
+	header nats.Header,
+) (result context.Context) {
+	result = ctx
+	if c == nil || c.propagator == nil {
+		return result
+	}
+
+	defer func() {
+		if recover() != nil {
+			result = ctx
+		}
+	}()
+	extracted := c.propagator.Extract(ctx, natsHeaderCarrier{header: header})
+	if extracted != nil {
+		result = extracted
+	}
+	return result
+}
+
+var _ coreprop.TextMapPropagator = (*safePropagationCompileCheck)(nil)
+
+// safePropagationCompileCheck exists only to keep the adapter-facing method
+// contract compile-checked without importing telemetry into messaging.
+type safePropagationCompileCheck struct{}
+
+func (*safePropagationCompileCheck) Inject(context.Context, coreprop.TextMapCarrier) {}
+
+func (*safePropagationCompileCheck) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
