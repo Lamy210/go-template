@@ -25,7 +25,8 @@ Platform packages own protocol and infrastructure translation. For example, appl
 Health and version endpoints are HTTP transport concerns, so their Huma registrations live under `internal/platform/httpserver` rather than pretending to be business modules.
 
 The HTTP adapter also owns its transport-level configuration contract (listener
-address, request timeouts, and header/body limits). `internal/app` maps the
+address, request timeouts, header/body limits, and the Huma documentation
+exposure policy). `internal/app` maps the
 environment-facing process config into that adapter config explicitly. The
 composition root binds the configured TCP listener synchronously before starting
 background workers, so a bind failure cannot occur after an outbox dispatcher or
@@ -33,6 +34,11 @@ another worker has already produced external side effects. Process shutdown
 budgeting remains at the composition root because it coordinates HTTP, messaging,
 telemetry, and database teardown rather than configuring `net/http.Server`
 itself.
+
+The built-in Huma documentation surface is explicitly controllable. When it is
+disabled, the adapter leaves Docs UI, OpenAPI, and schema routes unregistered and
+also removes Huma's default schema-link CreateHook so ordinary responses do not
+advertise unreachable schema URLs.
 
 HTTP panic containment is also transport-owned. The adapter returns the same
 generic `internal_error` contract when a response has not started, logs only
