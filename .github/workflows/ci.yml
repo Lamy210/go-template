@@ -64,6 +64,41 @@ jobs:
       - name: Validate Compose configuration
         run: docker compose config --quiet
 
+      - name: Smoke test hardened container runtime
+        run: |
+          image_user="$(docker image inspect --format '{{.Config.User}}' go-template:ci)"
+          case "$image_user" in
+            ""|root|0|0:0)
+              echo "Container image must declare a non-root user; got: $image_user"
+              exit 1
+              ;;
+          esac
+
+          container_name="go-template-runtime-smoke"
+          cleanup() {
+            docker rm -f "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --name "$container_name" \
+            --read-only \
+            --cap-drop=ALL \
+            --security-opt no-new-privileges=true \
+            --pids-limit 128 \
+            -p 127.0.0.1:18080:8080 \
+            go-template:ci
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health/live >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs "$container_name"
+          exit 1
+
       - name: Lint
         run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 
