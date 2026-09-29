@@ -105,7 +105,12 @@ cancels the shared batch context immediately. Sibling publish calls that honor
 context stop early instead of creating additional broker side effects while
 durable state is already known to be uncertain. The dispatcher still drains all
 batch results so every canceled claim can attempt its bounded retry/settlement
-transition before the fatal error is returned to the process lifecycle.
+transition before returning.
+
+When multiple batch members independently report fatal errors, the dispatcher
+returns an `errors.Join` aggregate rather than discarding all but the first
+cause. This preserves `errors.Is` / `errors.As` visibility for every fatal
+settlement cause while keeping the existing sanitized operation-error strings.
 
 The default dispatcher bounds are:
 
