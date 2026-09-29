@@ -91,6 +91,13 @@ JetStream deduplication is enabled.
 JetStream's message-ID deduplication. Callers should use an operation/event ID,
 not generate a new ID on every retry.
 
+Non-empty message IDs must be canonical text: no leading/trailing ASCII
+whitespace and no CR/LF characters. The pinned NATS client normalizes those
+characters when serializing header values; rejecting them locally guarantees
+the application ID is byte-for-byte identical to the broker's `Nats-Msg-Id`.
+An empty message ID remains valid and disables JetStream deduplication for that
+publish.
+
 Publish subjects are validated as literal NATS subjects before tracing,
 propagation, or broker I/O. Wildcards and malformed subjects therefore fail at
 the messaging adapter boundary instead of consuming broker retry/error paths.

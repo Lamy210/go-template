@@ -28,6 +28,29 @@ func TestPublishRejectsInvalidLiteralSubjectBeforeBrokerUse(t *testing.T) {
 	}
 }
 
+func TestPublishRejectsNormalizedMessageIDBeforeBrokerUse(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{}
+	for _, msgID := range []string{
+		" event-1",
+		"event-1 ",
+		"\tevent-1",
+		"event-1\t",
+		"event\n1",
+		"event\r1",
+	} {
+		if _, err := client.Publish(
+			context.Background(),
+			"events.created",
+			msgID,
+			[]byte("payload"),
+		); err == nil {
+			t.Fatalf("Publish(msgID=%q) error = nil, want canonical ID error", msgID)
+		}
+	}
+}
+
 func TestReadinessCheckRejectsInvalidBoundaryInputs(t *testing.T) {
 	t.Parallel()
 

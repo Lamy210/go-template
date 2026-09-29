@@ -194,3 +194,12 @@ publish and durable settlement: one store timeout for claim, one publish
 timeout, and one store timeout for settlement. The shared stdlib-only
 `internal/outboxbudget` policy is used by both configuration validation and the
 runtime dispatcher so those boundaries cannot drift independently.
+
+
+## Stable message identifier invariant
+
+The stdlib-only `internal/messageid` policy is shared by the messaging and
+transactional-outbox boundaries. Non-empty stable IDs must survive text-header
+serialization without normalization: leading/trailing ASCII whitespace and
+CR/LF are rejected. This keeps durable outbox `event_id` values identical to
+JetStream `Nats-Msg-Id` deduplication keys.
