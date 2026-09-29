@@ -405,6 +405,35 @@ func TestListenFailsSynchronouslyWhenAddressIsOccupied(t *testing.T) {
 	}
 }
 
+func TestServerMethodsRejectUninitializedServer(t *testing.T) {
+	t.Parallel()
+
+	for _, server := range []*Server{nil, &Server{}} {
+		if handler := server.Handler(); handler != nil {
+			t.Fatalf("Handler() = %T, want nil", handler)
+		}
+
+		listener, err := server.Listen(context.Background())
+		if listener != nil {
+			_ = listener.Close()
+			t.Fatal("Listen() returned listener for uninitialized server")
+		}
+		if err == nil {
+			t.Fatal("Listen() error = nil, want uninitialized server error")
+		}
+
+		if err := server.Serve(nil); err == nil {
+			t.Fatal("Serve() error = nil, want uninitialized server error")
+		}
+		if err := server.ListenAndServe(); err == nil {
+			t.Fatal("ListenAndServe() error = nil, want uninitialized server error")
+		}
+		if err := server.Shutdown(context.Background()); err == nil {
+			t.Fatal("Shutdown() error = nil, want uninitialized server error")
+		}
+	}
+}
+
 func TestServeRejectsNilListener(t *testing.T) {
 	t.Parallel()
 
