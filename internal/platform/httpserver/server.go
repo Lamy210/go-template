@@ -253,9 +253,13 @@ func accessLog(
 
 			method := httpmethod.LowCardinality(r.Method)
 			routePattern := chi.RouteContext(r.Context()).RoutePattern()
-			if routeObserver != nil && routePattern != "" {
-				routeObserver(r.Context(), method, routePattern)
-			}
+			observeRouteSafely(
+				logger,
+				routeObserver,
+				r.Context(),
+				method,
+				routePattern,
+			)
 
 			logRoute := routePattern
 			if logRoute == "" {
@@ -275,10 +279,54 @@ func accessLog(
 				slog.Int64("duration_ms", time.Since(started).Milliseconds()),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
 			}
-			if contextAttrs != nil {
-				attrs = append(attrs, contextAttrs(r.Context())...)
-			}
+			attrs = append(
+				attrs,
+				contextLogAttrsSafely(logger, contextAttrs, r.Context())...,
+			)
 			logger.LogAttrs(r.Context(), slog.LevelInfo, "http request", attrs...)
 		})
 	}
+}
+
+
+func observeRouteSafely(
+	logger *slog.Logger,
+	observer RouteObserver,
+	ctx context.Context,
+	method string,
+	route string,
+) {
+	if observer == nil || route == "" {
+		return
+	}
+	defer func() {
+		if recover() == nil {
+			return
+		}
+		logger.WarnContext(
+			ctx,
+			"http route observer panic",
+			"method", method,
+			"route", route,
+		)
+	}()
+	observer(ctx, method, route)
+}
+
+func contextLogAttrsSafely(
+	logger *slog.Logger,
+	attrs ContextLogAttrs,
+	ctx context.Context,
+) (result []slog.Attr) {
+	if attrs == nil {
+		return nil
+	}
+	defer func() {
+		if recover() == nil {
+			return
+		}
+		result = nil
+		logger.WarnContext(ctx, "http context log attributes panic")
+	}()
+	return attrs(ctx)
 }
