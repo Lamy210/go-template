@@ -83,6 +83,38 @@ func (t *testTracer) StartProcess(
 	}
 }
 
+type panickingIntegrationPropagator struct{}
+
+func (panickingIntegrationPropagator) Inject(
+	context.Context,
+	coreprop.TextMapCarrier,
+) {
+	panic("sensitive propagation inject panic")
+}
+
+func (panickingIntegrationPropagator) Extract(
+	context.Context,
+	coreprop.TextMapCarrier,
+) context.Context {
+	panic("sensitive propagation extract panic")
+}
+
+type panickingIntegrationTracer struct{}
+
+func (panickingIntegrationTracer) StartPublish(
+	context.Context,
+	string,
+) (context.Context, func(error)) {
+	panic("sensitive publish tracer panic")
+}
+
+func (panickingIntegrationTracer) StartProcess(
+	context.Context,
+	string,
+) (context.Context, func(error)) {
+	panic("sensitive process tracer panic")
+}
+
 func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
@@ -247,6 +279,73 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 		if tracer.processStarted.Load() == 0 || tracer.processEnded.Load() == 0 {
 			t.Fatal("process tracer lifecycle was not invoked")
+		}
+	})
+
+	t.Run("observability hook panics do not stop publish or consume", func(t *testing.T) {
+		const subject = "template.events.observability-hook-panic"
+
+		hookClient, err := messaging.Open(
+			messaging.ClientConfig{
+				URL:            natsURL,
+				Name:           "go-template-observability-hook-panic",
+				ConnectTimeout: 2 * time.Second,
+				ReconnectWait:  100 * time.Millisecond,
+				MaxReconnects:  5,
+				DrainTimeout:   3 * time.Second,
+				RequestTimeout: 2 * time.Second,
+			},
+			messaging.WithPropagator(panickingIntegrationPropagator{}),
+			messaging.WithTracer(panickingIntegrationTracer{}),
+		)
+		if err != nil {
+			t.Fatalf("open hook-panic nats client: %v", err)
+		}
+		t.Cleanup(func() {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := hookClient.Drain(drainCtx); err != nil {
+				t.Errorf("drain hook-panic nats client: %v", err)
+			}
+		})
+
+		processed := make(chan struct{}, 1)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- hookClient.RunConsumer(
+				consumerCtx,
+				workerConfig(stream, "observability-hook-panic-worker", subject),
+				func(context.Context, messaging.Message) error {
+					processed <- struct{}{}
+					return nil
+				},
+			)
+		}()
+
+		if _, err := hookClient.Publish(
+			ctx,
+			subject,
+			"observability-hook-panic-1",
+			[]byte("observable"),
+		); err != nil {
+			t.Fatalf("publish with panicking observability hooks: %v", err)
+		}
+
+		select {
+		case <-processed:
+		case <-time.After(8 * time.Second):
+			t.Fatal("handler did not run after observability hook panics")
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("hook-panic consumer shutdown: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("hook-panic consumer did not drain")
 		}
 	})
 
