@@ -72,6 +72,16 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 			mutate: func(cfg *OutboxConfig) { cfg.BatchSize = 257 },
 		},
 		{
+			name:   "lease below postgres interval precision",
+			mutate: func(cfg *OutboxConfig) { cfg.Lease = 500 * time.Nanosecond },
+		},
+		{
+			name: "retry delay below postgres interval precision",
+			mutate: func(cfg *OutboxConfig) {
+				cfg.RetryBaseDelay = 500 * time.Nanosecond
+			},
+		},
+		{
 			name: "lease not longer than publish plus store",
 			mutate: func(cfg *OutboxConfig) {
 				cfg.Lease = cfg.PublishTimeout + cfg.StoreTimeout

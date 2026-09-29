@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -249,11 +250,20 @@ func (c NATSConfig) Validate() error {
 	if strings.TrimSpace(c.Durable) == "" || strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("NATS consumer names and subjects must not be empty")
 	}
+	if c.FilterSubject == c.QuarantineSubject {
+		return fmt.Errorf("NATS_FILTER_SUBJECT and NATS_QUARANTINE_SUBJECT must differ")
+	}
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("NATS consumer limits must be positive")
 	}
-	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 || c.PullExpiry <= 0 {
+	if c.ProcessAttempts > math.MaxInt-c.QuarantineAttempts {
+		return fmt.Errorf("NATS delivery attempts exceed integer range")
+	}
+	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 {
 		return fmt.Errorf("NATS worker timeouts must be positive")
+	}
+	if c.PullExpiry < time.Second {
+		return fmt.Errorf("NATS_PULL_EXPIRY must be at least one second")
 	}
 	if c.HandlerTimeout >= c.AckWait ||
 		c.AckTimeout >= c.AckWait-c.HandlerTimeout {

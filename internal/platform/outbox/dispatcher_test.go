@@ -379,6 +379,24 @@ func TestDispatcherCancellationDoesNotHideSettlementFailure(t *testing.T) {
 	}
 }
 
+func TestDispatcherConfigRejectsSubMicrosecondRetryDelay(t *testing.T) {
+	t.Parallel()
+
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          10 * time.Second,
+		MaxAttempts:    1,
+		RetryBaseDelay: 500 * time.Nanosecond,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: time.Second,
+		StoreTimeout:   time.Second,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want storage-precision error")
+	}
+}
+
 func TestDispatcherConfigRejectsOverflowingTimeoutBudget(t *testing.T) {
 	t.Parallel()
 
