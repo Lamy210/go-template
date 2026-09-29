@@ -584,6 +584,78 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	}
 }
 
+func TestAccessLogContainsRouteObserverPanic(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive route observer panic"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(
+		logger,
+		nil,
+		func(context.Context, string, string) {
+			panic(sensitive)
+		},
+	))
+	router.Get("/observed", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/observed", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+	if strings.Contains(logs.String(), sensitive) {
+		t.Fatalf("logs exposed route observer panic value: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "http route observer panic") {
+		t.Fatalf("sanitized route observer warning missing: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "http request") {
+		t.Fatalf("access log missing after route observer panic: %s", logs.String())
+	}
+}
+
+func TestAccessLogContainsContextAttrsPanic(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive context attrs panic"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(
+		logger,
+		func(context.Context) []slog.Attr {
+			panic(sensitive)
+		},
+		nil,
+	))
+	router.Get("/observed", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/observed", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+	if strings.Contains(logs.String(), sensitive) {
+		t.Fatalf("logs exposed context attrs panic value: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "http context log attributes panic") {
+		t.Fatalf("sanitized context attrs warning missing: %s", logs.String())
+	}
+	if !strings.Contains(logs.String(), "http request") {
+		t.Fatalf("access log missing after context attrs panic: %s", logs.String())
+	}
+}
+
 func TestAccessLogUsesImplicitOKStatus(t *testing.T) {
 	t.Parallel()
 
