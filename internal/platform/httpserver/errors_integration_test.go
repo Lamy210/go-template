@@ -67,7 +67,7 @@ func TestHumaUnknownHandlerErrorIsSanitized(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
-	api := humachi.New(router, newAPIConfig())
+	api := humachi.New(router, newAPIConfig(true))
 
 	type output struct {
 		Body struct {
