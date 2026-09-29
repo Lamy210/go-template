@@ -10,7 +10,7 @@ COMMIT ?= unknown
 BUILD_DATE ?= unknown
 BUILD_LDFLAGS := -s -w -X '$(MODULE_PATH)/internal/buildinfo.version=$(VERSION)' -X '$(MODULE_PATH)/internal/buildinfo.commit=$(COMMIT)' -X '$(MODULE_PATH)/internal/buildinfo.buildDate=$(BUILD_DATE)'
 
-.PHONY: dev test test-integration test-integration-external test-messaging fmt lint vet build vuln check generate generate-check
+.PHONY: dev test test-integration test-integration-external test-messaging test-outbox fmt lint vet build vuln check generate generate-check
 .PHONY: db-up db-down nats-up nats-down migrate-hash migrate-status migrate-up migrate-diff
 
 dev:
@@ -28,6 +28,9 @@ test-integration-external:
 
 test-messaging:
 	NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}" $(GO) test -tags=messaging ./internal/platform/messaging
+
+test-outbox:
+	cd test/integration && NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}" $(GO) test -run '^TestOutboxDispatcherPublishesToJetStream$' ./...
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
