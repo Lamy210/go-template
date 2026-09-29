@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -581,6 +582,111 @@ func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	}
 	if entry["request_id"] == "" {
 		t.Fatal("request_id is empty")
+	}
+}
+
+func TestAccessLogContextAttrsCannotOverrideCanonicalFields(t *testing.T) {
+	t.Parallel()
+
+	const traceID = "0123456789abcdef0123456789abcdef"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil)).With(
+		"service", "canonical-service",
+	)
+	server := newTestServer(
+		t,
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithContextLogAttrs(func(context.Context) []slog.Attr {
+			return []slog.Attr{
+				slog.String("service", "spoofed-service"),
+				slog.String("method", "SPOOFED"),
+				slog.String("route", "/sensitive/raw/path"),
+				slog.Int("status", 999),
+				slog.String("request_id", "spoofed-request"),
+				slog.String("trace_id", traceID),
+			}
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /health/live status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["service"] != "canonical-service" {
+		t.Fatalf("service = %v, want canonical-service", entry["service"])
+	}
+	if entry["method"] != http.MethodGet {
+		t.Fatalf("method = %v, want %s", entry["method"], http.MethodGet)
+	}
+	if entry["route"] != "/health/live" {
+		t.Fatalf("route = %v, want /health/live", entry["route"])
+	}
+	if entry["status"] != float64(http.StatusOK) {
+		t.Fatalf("status = %v, want %d", entry["status"], http.StatusOK)
+	}
+	if entry["request_id"] == "spoofed-request" || entry["request_id"] == "" {
+		t.Fatalf("request_id = %v, want generated canonical value", entry["request_id"])
+	}
+	if entry["trace_id"] != traceID {
+		t.Fatalf("trace_id = %v, want %s", entry["trace_id"], traceID)
+	}
+	if strings.Contains(logs.String(), "sensitive/raw/path") ||
+		strings.Contains(logs.String(), "spoofed-service") {
+		t.Fatalf("access log contains reserved callback value: %s", logs.String())
+	}
+}
+
+func TestAccessLogContextAttrsAreBounded(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	server := newTestServer(
+		t,
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithContextLogAttrs(func(context.Context) []slog.Attr {
+			attrs := make([]slog.Attr, 0, maxContextLogAttrs+4)
+			for i := 0; i < maxContextLogAttrs+4; i++ {
+				attrs = append(
+					attrs,
+					slog.Int(fmt.Sprintf("context_%02d", i), i),
+				)
+			}
+			return attrs
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /health/live status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if _, ok := entry["context_15"]; !ok {
+		t.Fatal("last allowed context attribute is missing")
+	}
+	if _, ok := entry["context_16"]; ok {
+		t.Fatalf("context attributes exceeded max %d: %s", maxContextLogAttrs, logs.String())
 	}
 }
 
