@@ -165,14 +165,14 @@ func (c OutboxConfig) Validate() error {
 	if c.PollInterval <= 0 {
 		return fmt.Errorf("OUTBOX_DISPATCH_POLL_INTERVAL must be positive")
 	}
-	if c.Lease <= 0 || c.Lease > 24*time.Hour {
-		return fmt.Errorf("OUTBOX_DISPATCH_LEASE must be positive and at most 24h")
+	if c.Lease < time.Microsecond || c.Lease > 24*time.Hour {
+		return fmt.Errorf("OUTBOX_DISPATCH_LEASE must be between one microsecond and 24h")
 	}
 	if c.MaxAttempts <= 0 {
 		return fmt.Errorf("OUTBOX_DISPATCH_MAX_ATTEMPTS must be positive")
 	}
-	if c.RetryBaseDelay <= 0 || c.RetryMaxDelay <= 0 {
-		return fmt.Errorf("outbox dispatcher retry delays must be positive")
+	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
+		return fmt.Errorf("outbox dispatcher retry delays must be at least one microsecond")
 	}
 	if c.RetryMaxDelay < c.RetryBaseDelay {
 		return fmt.Errorf(
