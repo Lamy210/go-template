@@ -45,7 +45,8 @@ unlimited `MaxMsgs` / `MaxBytes` defaults.
 When `NATS_ENABLED=true`, the application composition root:
 
 1. creates one bounded NATS connection;
-2. creates or reconciles the configured JetStream stream;
+2. creates the configured JetStream stream when it is missing, but refuses to
+   mutate an existing stream whose managed configuration differs;
 3. includes NATS/JetStream in `/health/ready` alongside other enabled
    required dependencies, verifying both that the configured required stream
    still exists and that the stream fields managed by this template have not
@@ -53,6 +54,12 @@ When `NATS_ENABLED=true`, the application composition root:
 4. drains HTTP first and then drains NATS during normal shutdown;
 5. keeps an immediate connection close as a fail-safe for startup failure or
    abnormal exit.
+
+Existing stream changes are an explicit operational action. The runtime does
+not call `UpdateStream` during startup, so an accidental configuration change
+cannot silently reduce retention/size limits or replace subjects on an existing
+stream. Drift fails startup/readiness until an operator performs the intended
+JetStream migration.
 
 The application does not register a fake business consumer. Consumer handlers
 belong to a feature/application package and call `RunConsumer` with the
@@ -164,8 +171,9 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - bounded failure followed by quarantine with propagation preserved;
 - consumer drain on cancellation;
 - NATS/JetStream readiness while the required stream exists with the managed configuration;
+- startup provisioning refuses managed drift without auto-reconciling it;
 - readiness failure after a managed stream field drifts;
-- readiness recovery after the managed stream configuration is restored;
+- readiness recovery only after an explicit admin-side stream restore;
 - readiness failure after the required stream is deleted.
 
 The profile remains independent of PostgreSQL. When both profiles are enabled,
