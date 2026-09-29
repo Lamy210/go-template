@@ -33,8 +33,7 @@ func TestClientConfigRejectsBlankConnectionIdentity(t *testing.T) {
 		{
 			name: "blank name",
 			mutate: func(cfg *ClientConfig) {
-				cfg.Name = "
-"
+				cfg.Name = "\n"
 			},
 		},
 	}
