@@ -330,16 +330,15 @@ func contextLogAttrsSafely(
 	}()
 
 	attrs := callback(ctx)
-	if len(attrs) > maxContextLogAttrs {
-		attrs = attrs[:maxContextLogAttrs]
-	}
-
-	result = make([]slog.Attr, 0, len(attrs))
+	result = make([]slog.Attr, 0, min(len(attrs), maxContextLogAttrs))
 	for _, attr := range attrs {
 		if attr.Key == "" || reservedAccessLogKey(attr.Key) {
 			continue
 		}
 		result = append(result, attr)
+		if len(result) == maxContextLogAttrs {
+			break
+		}
 	}
 	return result
 }
