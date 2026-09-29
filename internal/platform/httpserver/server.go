@@ -152,14 +152,18 @@ func validClientRequestID(value string) bool {
 
 func newAPIConfig(docsEnabled bool) huma.Config {
 	cfg := huma.DefaultConfig("Go Service API", apiVersion)
+
+	// Huma v2.39.1 DefaultConfig installs one CreateHook which injects schema
+	// links into normal responses. That mutates public response bodies and uses
+	// forwarded host metadata to build absolute $schema URLs. This template does
+	// not define a trusted-proxy boundary, so keep response contracts independent
+	// from forwarded headers and expose schemas only through explicit docs routes.
+	cfg.CreateHooks = nil
+
 	if !docsEnabled {
 		cfg.OpenAPIPath = ""
 		cfg.DocsPath = ""
 		cfg.SchemasPath = ""
-		// DefaultConfig installs one CreateHook whose only purpose is adding
-		// schema links to responses. With SchemasPath disabled, retaining that
-		// hook would generate broken root-relative schema links.
-		cfg.CreateHooks = nil
 	}
 	cfg.Transformers = append(cfg.Transformers, transformHumaError)
 	return cfg
