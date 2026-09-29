@@ -148,8 +148,18 @@ Normal shutdown is ordered:
 2. drain NATS when enabled;
 3. flush and shut down trace and metric providers.
 
-Telemetry shutdown is bounded by `TELEMETRY_SHUTDOWN_TIMEOUT`. Startup failure
-after telemetry initialization also triggers a bounded fail-safe shutdown.
+Telemetry shutdown is bounded by `TELEMETRY_SHUTDOWN_TIMEOUT`. Trace and
+metric providers receive that same budget concurrently, so one signal cannot
+consume the entire deadline before the other starts. Force-flush follows the
+same concurrent lifecycle rule.
+
+Lifecycle failures retain the underlying SDK cause for `errors.Is/errors.As`
+but expose only stable operation names through normal error formatting. This
+keeps shutdown/flush diagnostics from leaking collector endpoints or backend
+response details when the application logs its terminal error.
+
+Startup failure after telemetry initialization also triggers a bounded fail-safe
+shutdown.
 
 ## Security
 
