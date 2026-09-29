@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Lamy210/go-template/internal/httpmethod"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -62,6 +63,37 @@ func TestSafeRecovererReturnsSanitizedInternalError(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "\"status\":500") {
 		t.Fatalf("access log did not record recovered 500: %s", logs.String())
+	}
+}
+
+func TestSafeRecovererNormalizesUnknownMethodInPanicLog(t *testing.T) {
+	t.Parallel()
+
+	const rawMethod = "BREW-sensitive-tenant-12345"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+
+	handler := safeRecoverer(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("opaque panic")
+	}))
+
+	req := httptest.NewRequest(rawMethod, "/panic", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusInternalServerError)
+	}
+	if strings.Contains(logs.String(), rawMethod) {
+		t.Fatalf("panic log exposed raw unknown method: %s", logs.String())
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode panic log: %v; log=%s", err, logs.String())
+	}
+	if entry["method"] != httpmethod.Other {
+		t.Fatalf("method = %v, want %q", entry["method"], httpmethod.Other)
 	}
 }
 
