@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -39,7 +40,11 @@ func (c StreamConfig) Validate() error {
 	return nil
 }
 
-// EnsureStream creates or updates a bounded file-backed JetStream stream.
+var errManagedStreamConfigDrift = errors.New("managed stream configuration differs")
+
+// EnsureStream creates the bounded file-backed JetStream stream when it is
+// missing. An existing stream must already match the managed configuration;
+// startup never mutates an existing stream implicitly.
 func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -48,9 +53,29 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	_, err := c.js.CreateOrUpdateStream(requestCtx, managedStreamConfig(cfg))
+	stream, err := c.js.CreateStream(requestCtx, managedStreamConfig(cfg))
 	if err != nil {
-		return newOperationError("create or update jetstream stream", err)
+		if errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+			return newOperationError(
+				"required jetstream stream configuration drift",
+				errors.Join(errManagedStreamConfigDrift, err),
+			)
+		}
+		return newOperationError("create jetstream stream", err)
+	}
+
+	info := stream.CachedInfo()
+	if info == nil {
+		return newOperationError(
+			"read required jetstream stream configuration",
+			errors.New("stream information unavailable"),
+		)
+	}
+	if !managedStreamConfigMatches(info.Config, cfg) {
+		return newOperationError(
+			"required jetstream stream configuration drift",
+			errManagedStreamConfigDrift,
+		)
 	}
 	return nil
 }
