@@ -248,6 +248,7 @@ func Run(ctx context.Context) error {
 			IdleTimeout:       cfg.HTTP.IdleTimeout,
 			MaxHeaderBytes:    cfg.HTTP.MaxHeaderBytes,
 			MaxBodyBytes:      cfg.HTTP.MaxBodyBytes,
+			DocsEnabled:       cfg.HTTP.DocsEnabled,
 		},
 		logger,
 		serviceInfo,
