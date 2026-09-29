@@ -184,6 +184,26 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 	}
 }
 
+func TestStreamConfigRejectsInvalidName(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig().Stream
+	cfg.Name = "TEST.EVENTS"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want invalid stream name error")
+	}
+}
+
+func TestConsumerConfigRejectsInvalidDurableName(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.Durable = "worker/name"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want invalid durable name error")
+	}
+}
+
 func TestStreamConfigRejectsInvalidSubjectPattern(t *testing.T) {
 	t.Parallel()
 

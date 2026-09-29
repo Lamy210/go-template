@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 )
 
@@ -243,6 +244,9 @@ func (c NATSConfig) Validate() error {
 	if strings.TrimSpace(c.Stream) == "" || len(c.Subjects) == 0 {
 		return fmt.Errorf("NATS stream and subjects must not be empty")
 	}
+	if err := natsname.Validate(c.Stream); err != nil {
+		return fmt.Errorf("NATS_STREAM is invalid: %w", err)
+	}
 	for _, subject := range c.Subjects {
 		if err := natssubject.ValidatePattern(subject); err != nil {
 			return fmt.Errorf("NATS_SUBJECTS contains an invalid subject pattern: %w", err)
@@ -256,6 +260,9 @@ func (c NATSConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Durable) == "" || strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("NATS consumer names and subjects must not be empty")
+	}
+	if err := natsname.Validate(c.Durable); err != nil {
+		return fmt.Errorf("NATS_DURABLE is invalid: %w", err)
 	}
 	if err := natssubject.ValidatePattern(c.FilterSubject); err != nil {
 		return fmt.Errorf("NATS_FILTER_SUBJECT is invalid: %w", err)

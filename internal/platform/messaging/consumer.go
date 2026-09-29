@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -59,6 +60,9 @@ func (c ConsumerConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Durable) == "" {
 		return fmt.Errorf("consumer durable name must not be empty")
+	}
+	if err := natsname.Validate(c.Durable); err != nil {
+		return fmt.Errorf("consumer durable name is invalid: %w", err)
 	}
 	if strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("consumer filter and quarantine subjects must not be empty")

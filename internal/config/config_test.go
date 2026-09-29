@@ -314,6 +314,18 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid stream name",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Stream = "APP.EVENTS"
+			},
+		},
+		{
+			name: "invalid durable name",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Durable = "app worker"
+			},
+		},
+		{
 			name: "filter wildcard captures quarantine",
 			mutate: func(cfg *NATSConfig) {
 				cfg.FilterSubject = "app.events.>"
