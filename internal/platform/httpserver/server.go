@@ -20,6 +20,7 @@ const (
 	apiVersion              = "0.1.0"
 	unmatchedRoute          = "<unmatched>"
 	maxClientRequestIDBytes = 128
+	maxContextLogAttrs      = 16
 )
 
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
@@ -327,5 +328,39 @@ func contextLogAttrsSafely(
 		result = nil
 		logger.WarnContext(ctx, "http context log attributes panic")
 	}()
-	return callback(ctx)
+
+	attrs := callback(ctx)
+	if len(attrs) > maxContextLogAttrs {
+		attrs = attrs[:maxContextLogAttrs]
+	}
+
+	result = make([]slog.Attr, 0, len(attrs))
+	for _, attr := range attrs {
+		if attr.Key == "" || reservedAccessLogKey(attr.Key) {
+			continue
+		}
+		result = append(result, attr)
+	}
+	return result
+}
+
+func reservedAccessLogKey(key string) bool {
+	switch key {
+	case "time",
+		"level",
+		"msg",
+		"source",
+		"service",
+		"version",
+		"environment",
+		"method",
+		"route",
+		"status",
+		"bytes",
+		"duration_ms",
+		"request_id":
+		return true
+	default:
+		return false
+	}
 }
