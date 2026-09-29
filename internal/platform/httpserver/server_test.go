@@ -647,6 +647,59 @@ func TestAccessLogContextAttrsCannotOverrideCanonicalFields(t *testing.T) {
 	}
 }
 
+func TestAccessLogContextAttrsLimitAppliesAfterReservedFiltering(t *testing.T) {
+	t.Parallel()
+
+	const traceID = "0123456789abcdef0123456789abcdef"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	server := newTestServer(
+		t,
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithContextLogAttrs(func(context.Context) []slog.Attr {
+			attrs := make([]slog.Attr, 0, maxContextLogAttrs+2)
+			attrs = append(
+				attrs,
+				slog.String("method", "SPOOFED"),
+				slog.String("status", "SPOOFED"),
+			)
+			for i := 0; i < maxContextLogAttrs-1; i++ {
+				attrs = append(
+					attrs,
+					slog.Int(fmt.Sprintf("context_%02d", i), i),
+				)
+			}
+			attrs = append(attrs, slog.String("trace_id", traceID))
+			return attrs
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("GET /health/live status = %d, want %d", res.Code, http.StatusOK)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["trace_id"] != traceID {
+		t.Fatalf("trace_id = %v, want %s", entry["trace_id"], traceID)
+	}
+	if entry["method"] != http.MethodGet {
+		t.Fatalf("method = %v, want %s", entry["method"], http.MethodGet)
+	}
+	if entry["status"] != float64(http.StatusOK) {
+		t.Fatalf("status = %v, want %d", entry["status"], http.StatusOK)
+	}
+}
+
 func TestAccessLogContextAttrsAreBounded(t *testing.T) {
 	t.Parallel()
 
