@@ -148,7 +148,7 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 
 // MarkPublished settles a claimed record after successful external publish.
 func (s *Store) MarkPublished(ctx context.Context, event ClaimedEvent) error {
-	return s.transition(ctx, markPublishedSQL, event.ID, event.LockToken)
+	return s.transition(ctx, markPublishedSQL, event)
 }
 
 // Retry releases a claim and schedules another attempt after delay.
@@ -162,21 +162,36 @@ func (s *Store) Retry(ctx context.Context, event ClaimedEvent, delay time.Durati
 	return s.transition(
 		ctx,
 		retrySQL,
-		event.ID,
-		event.LockToken,
+		event,
 		durationInterval(delay),
 	)
 }
 
 // MarkFailed permanently stops automatic dispatch for a claimed event.
 func (s *Store) MarkFailed(ctx context.Context, event ClaimedEvent) error {
-	return s.transition(ctx, failSQL, event.ID, event.LockToken)
+	return s.transition(ctx, failSQL, event)
 }
 
-func (s *Store) transition(ctx context.Context, query string, args ...any) error {
+func (s *Store) transition(
+	ctx context.Context,
+	query string,
+	event ClaimedEvent,
+	extraArgs ...any,
+) error {
 	if s == nil || s.pool == nil {
 		return errors.New("outbox store must not be nil")
 	}
+	if event.ID <= 0 {
+		return errors.New("outbox claimed event ID must be positive")
+	}
+	if event.LockToken == "" {
+		return errors.New("outbox claimed event lock token must not be empty")
+	}
+
+	args := make([]any, 0, 2+len(extraArgs))
+	args = append(args, event.ID, event.LockToken)
+	args = append(args, extraArgs...)
+
 	tag, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return newOperationError("settle outbox event", err)
