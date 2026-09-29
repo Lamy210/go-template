@@ -408,7 +408,7 @@ func TestListenFailsSynchronouslyWhenAddressIsOccupied(t *testing.T) {
 func TestServerMethodsRejectUninitializedServer(t *testing.T) {
 	t.Parallel()
 
-	for _, server := range []*Server{nil, &Server{}} {
+	for _, server := range []*Server{nil, {}} {
 		if handler := server.Handler(); handler != nil {
 			t.Fatalf("Handler() = %T, want nil", handler)
 		}
