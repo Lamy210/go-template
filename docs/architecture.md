@@ -149,8 +149,9 @@ the normal access log continue with a sanitized warning.
 Context-derived access-log attributes are an extension surface, not a second
 owner of the access-log schema. The HTTP adapter drops empty/reserved keys
 (`service`, `method`, `route`, `status`, `request_id`, and other
-canonical record fields) and logs at most 16 callback attributes per request.
-This keeps core fields authoritative and bounds extension-driven record growth.
+canonical record fields) and logs at most 16 accepted non-reserved callback
+attributes per request. Reserved entries do not consume that allowance. This
+keeps core fields authoritative and bounds extension-driven record growth.
 
 Shutdown order is HTTP first, the outbox dispatcher second when enabled, NATS third when enabled, PostgreSQL fourth when enabled, and telemetry last so completed work can be flushed before process exit. HTTP shutdown first attempts graceful drain within `HTTP_SHUTDOWN_TIMEOUT`; if that context expires, the adapter force-closes active HTTP connections before dependency teardown continues. PostgreSQL close is independently bounded by `DATABASE_SHUTDOWN_TIMEOUT` because pgxpool close itself is not context-aware.
 
