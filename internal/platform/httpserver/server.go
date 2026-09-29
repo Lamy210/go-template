@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/httpmethod"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/go-chi/chi/v5"
@@ -247,9 +248,10 @@ func accessLog(
 			wrapped := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(wrapped, r)
 
+			method := httpmethod.LowCardinality(r.Method)
 			routePattern := chi.RouteContext(r.Context()).RoutePattern()
 			if routeObserver != nil && routePattern != "" {
-				routeObserver(r.Context(), r.Method, routePattern)
+				routeObserver(r.Context(), method, routePattern)
 			}
 
 			logRoute := routePattern
@@ -263,7 +265,7 @@ func accessLog(
 			}
 
 			attrs := []slog.Attr{
-				slog.String("method", r.Method),
+				slog.String("method", method),
 				slog.String("route", logRoute),
 				slog.Int("status", status),
 				slog.Int("bytes", wrapped.BytesWritten()),
