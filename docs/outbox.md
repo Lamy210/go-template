@@ -44,7 +44,10 @@ Each event stores:
 - lease token/deadline;
 - published/failed timestamps.
 
-`event_id` is unique and becomes the external message deduplication ID.
+`event_id` is unique and becomes the external message deduplication ID. It
+must be canonical text with no leading/trailing ASCII whitespace or CR/LF
+characters. This guarantees the durable application ID is not normalized when
+the default NATS dispatcher serializes it as `Nats-Msg-Id`.
 
 ## Propagation metadata
 
