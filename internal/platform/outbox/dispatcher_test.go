@@ -11,13 +11,13 @@ import (
 )
 
 type fakeEventStore struct {
-	mu        sync.Mutex
-	claims    [][]ClaimedEvent
-	claimErr  error
-	claimFn   func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
-	published []ClaimedEvent
-	retried   []retryCall
-	failed    []ClaimedEvent
+	mu              sync.Mutex
+	claims          [][]ClaimedEvent
+	claimErr        error
+	claimFn         func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
+	published       []ClaimedEvent
+	retried         []retryCall
+	failed          []ClaimedEvent
 	settleErr       error
 	markPublishedFn func(context.Context, ClaimedEvent) error
 }
