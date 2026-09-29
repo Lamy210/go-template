@@ -288,7 +288,6 @@ func accessLog(
 	}
 }
 
-
 func observeRouteSafely(
 	logger *slog.Logger,
 	observer RouteObserver,
@@ -315,10 +314,10 @@ func observeRouteSafely(
 
 func contextLogAttrsSafely(
 	logger *slog.Logger,
-	attrs ContextLogAttrs,
+	callback ContextLogAttrs,
 	ctx context.Context,
 ) (result []slog.Attr) {
-	if attrs == nil {
+	if callback == nil {
 		return nil
 	}
 	defer func() {
@@ -328,5 +327,5 @@ func contextLogAttrsSafely(
 		result = nil
 		logger.WarnContext(ctx, "http context log attributes panic")
 	}()
-	return attrs(ctx)
+	return callback(ctx)
 }
