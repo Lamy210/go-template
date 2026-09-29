@@ -96,7 +96,9 @@ before the outer OpenTelemetry middleware ends the span.
 Only matched chi route templates are observed. Unmatched requests do not fall
 back to `URL.Path`, preventing per-ID paths or other high-cardinality/raw URL
 values from becoming span names or `http.route` attributes. Unknown HTTP
-methods use `HTTP {route}` as the span name.
+methods use `HTTP {route}` as the span name. The same stdlib-only
+`internal/httpmethod` policy is used by HTTP access logging, so unknown method
+tokens cannot create independent high-cardinality dimensions in logs and traces.
 
 The HTTP adapter also accepts an optional context-to-log-attributes callback.
 The telemetry profile supplies this callback to extract correlation identifiers
