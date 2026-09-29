@@ -86,6 +86,10 @@ JetStream deduplication is enabled.
 JetStream's message-ID deduplication. Callers should use an operation/event ID,
 not generate a new ID on every retry.
 
+Publish subjects are validated as literal NATS subjects before tracing,
+propagation, or broker I/O. Wildcards and malformed subjects therefore fail at
+the messaging adapter boundary instead of consuming broker retry/error paths.
+
 ## Tracing and context propagation
 
 Messaging accepts optional transport-neutral propagation and operation-tracing
