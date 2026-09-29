@@ -3,7 +3,6 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -349,26 +348,44 @@ func LogAttrs(ctx context.Context) []slog.Attr {
 	return attrs
 }
 
-// ForceFlush exports pending traces and metrics within the caller's deadline.
+// ForceFlush exports pending traces and metrics concurrently within the caller's
+// deadline. SDK errors retain their causes for errors.Is/errors.As traversal but
+// expose only stable operation names through Error().
 func (p *Provider) ForceFlush(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	return errors.Join(
-		p.tracerProvider.ForceFlush(ctx),
-		p.meterProvider.ForceFlush(ctx),
+	return runLifecycleOperations(
+		ctx,
+		lifecycleOperation{
+			name: "flush telemetry traces",
+			run:  p.tracerProvider.ForceFlush,
+		},
+		lifecycleOperation{
+			name: "flush telemetry metrics",
+			run:  p.meterProvider.ForceFlush,
+		},
 	)
 }
 
-// Shutdown flushes and releases the trace and metric pipelines once.
+// Shutdown flushes and releases the trace and metric pipelines once. Both
+// signal providers receive the same shutdown budget concurrently so one signal
+// cannot consume the entire deadline before the other starts.
 func (p *Provider) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
 	p.shutdownOnce.Do(func() {
-		p.shutdownErr = errors.Join(
-			p.meterProvider.Shutdown(ctx),
-			p.tracerProvider.Shutdown(ctx),
+		p.shutdownErr = runLifecycleOperations(
+			ctx,
+			lifecycleOperation{
+				name: "shutdown telemetry metrics",
+				run:  p.meterProvider.Shutdown,
+			},
+			lifecycleOperation{
+				name: "shutdown telemetry traces",
+				run:  p.tracerProvider.Shutdown,
+			},
 		)
 	})
 	return p.shutdownErr
