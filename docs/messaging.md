@@ -18,7 +18,9 @@ The NATS client default reconnect limit is finite, but the template still sets
 it explicitly. Negative reconnect counts are rejected because they mean retry
 forever.
 
-JetStream consumers are also configured explicitly:
+JetStream consumers are also configured explicitly. Durable consumers are
+created when missing, but an existing durable is never updated implicitly by
+`RunConsumer`:
 
 - explicit acknowledgements;
 - finite processing attempts;
@@ -55,10 +57,11 @@ When `NATS_ENABLED=true`, the application composition root:
 5. keeps an immediate connection close as a fail-safe for startup failure or
    abnormal exit.
 
-Existing stream changes are an explicit operational action. The runtime does
-not call `UpdateStream` during startup, so an accidental configuration change
-cannot silently reduce retention/size limits or replace subjects on an existing
-stream. Drift fails startup/readiness until an operator performs the intended
+Existing stream and durable-consumer changes are explicit operational actions.
+The runtime does not call `UpdateStream` or `UpdateConsumer` during normal
+startup. An accidental configuration change therefore cannot silently reduce
+stream retention/size limits, replace subjects, or alter a worker's ack/retry
+contract. Managed drift fails startup until an operator performs the intended
 JetStream migration.
 
 The application does not register a fake business consumer. Consumer handlers
@@ -162,6 +165,8 @@ for local diagnostics.
 The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 
 - stream provisioning with explicit limits;
+- durable consumer provisioning without implicit updates;
+- durable consumer drift rejection while leaving operator-managed metadata alone;
 - message-ID deduplication;
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
