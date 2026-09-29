@@ -3,6 +3,7 @@ SQLC ?= sqlc
 ATLAS ?= atlas
 GOLANGCI_LINT_VERSION ?= v2.14.0
 GOVULNCHECK_VERSION ?= v1.8.0
+NATS_URL ?= nats://127.0.0.1:4222
 
 MODULE_PATH := $(shell $(GO) list -m)
 VERSION ?= dev
@@ -27,10 +28,10 @@ test-integration-external:
 	cd test/integration && DATABASE_URL="$(DATABASE_URL)" $(GO) test ./...
 
 test-messaging:
-	NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}" $(GO) test -tags=messaging ./internal/platform/messaging
+	NATS_URL="$(NATS_URL)" $(GO) test -tags=messaging ./internal/platform/messaging
 
 test-outbox:
-	cd test/integration && NATS_URL="${NATS_URL:-nats://127.0.0.1:4222}" $(GO) test -run '^TestOutboxDispatcherPublishesToJetStream$' ./...
+	cd test/integration && NATS_URL="$(NATS_URL)" $(GO) test -run 'TestOutboxDispatcherPublishesToJetStream' ./...
 
 fmt:
 	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
