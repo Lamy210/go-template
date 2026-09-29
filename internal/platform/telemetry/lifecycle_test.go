@@ -88,8 +88,8 @@ func TestRunLifecycleOperationsSanitizesErrorsAndPreservesCauses(t *testing.T) {
 		strings.Contains(err.Error(), "token=secret") {
 		t.Fatalf("lifecycle error exposed raw SDK diagnostics: %q", err.Error())
 	}
-	if !strings.Contains(err.Error(), "flush telemetry traces") ||
-		!strings.Contains(err.Error(), "flush telemetry metrics") {
-		t.Fatalf("lifecycle error omitted safe operation names: %q", err.Error())
+	const want = "flush telemetry traces\nflush telemetry metrics"
+	if err.Error() != want {
+		t.Fatalf("lifecycle error = %q, want deterministic %q", err.Error(), want)
 	}
 }
