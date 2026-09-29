@@ -76,6 +76,20 @@ type Client struct {
 	tracer         OperationTracer
 }
 
+func (c *Client) validateInitialized() error {
+	if c == nil || c.conn == nil || c.js == nil || c.requestTimeout <= 0 {
+		return errors.New("nats client must be initialized")
+	}
+	return nil
+}
+
+func (c *Client) validateConnection() error {
+	if c == nil || c.conn == nil {
+		return errors.New("nats client connection must be initialized")
+	}
+	return nil
+}
+
 // Open connects to NATS without retrying the initial startup connection.
 // Subsequent reconnect attempts are bounded by MaxReconnects.
 func Open(cfg ClientConfig, options ...Option) (*Client, error) {
@@ -136,6 +150,9 @@ func (c *Client) Publish(
 ) (PublishAck, error) {
 	if err := natssubject.ValidateLiteral(subject); err != nil {
 		return PublishAck{}, fmt.Errorf("nats publish subject is invalid: %w", err)
+	}
+	if err := c.validateInitialized(); err != nil {
+		return PublishAck{}, err
 	}
 
 	msg := nats.NewMsg(subject)
@@ -203,8 +220,8 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 		if timeout <= 0 {
 			return errors.New("nats readiness timeout must be positive")
 		}
-		if c == nil || c.conn == nil {
-			return errors.New("nats client must be initialized")
+		if err := c.validateInitialized(); err != nil {
+			return err
 		}
 		if c.conn.Status() != nats.CONNECTED {
 			return newOperationError("nats connection is not ready", errors.New("connection not connected"))
@@ -237,6 +254,9 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 // Drain gracefully drains the NATS connection and waits for it to close.
 // When ctx expires, the connection is forcibly closed.
 func (c *Client) Drain(ctx context.Context) error {
+	if err := c.validateConnection(); err != nil {
+		return err
+	}
 	if c.conn.IsClosed() {
 		return nil
 	}
