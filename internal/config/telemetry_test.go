@@ -67,6 +67,22 @@ func TestTelemetryEnabledLoadsBoundedSettings(t *testing.T) {
 	}
 }
 
+func TestTelemetryRejectsNaNSampleRatioFromEnvironment(t *testing.T) {
+	t.Parallel()
+
+	values := map[string]string{
+		"TELEMETRY_ENABLED":            "true",
+		"TELEMETRY_TRACE_SAMPLE_RATIO": "NaN",
+	}
+	_, err := loadTelemetry(func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil {
+		t.Fatal("loadTelemetry() error = nil, want non-finite sample ratio error")
+	}
+}
+
 func TestTelemetryEndpointParseErrorRedactsRawValue(t *testing.T) {
 	t.Parallel()
 
