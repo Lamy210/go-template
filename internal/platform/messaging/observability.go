@@ -118,4 +118,3 @@ func (c *Client) extractPropagationSafely(
 	}
 	return result
 }
-
