@@ -69,6 +69,13 @@ type Server struct {
 	handler    http.Handler
 }
 
+func (s *Server) validateInitialized() error {
+	if s == nil || s.httpServer == nil || s.handler == nil || s.httpServer.Handler == nil {
+		return errors.New("http server must be initialized")
+	}
+	return nil
+}
+
 // New builds a validated HTTP server from adapter-owned transport settings.
 func New(
 	cfg Config,
@@ -171,6 +178,9 @@ func newAPIConfig(docsEnabled bool) huma.Config {
 
 // Handler exposes the configured HTTP handler for tests and embedding.
 func (s *Server) Handler() http.Handler {
+	if s == nil || s.handler == nil {
+		return nil
+	}
 	return s.handler
 }
 
@@ -178,12 +188,18 @@ func (s *Server) Handler() http.Handler {
 // use this to prove that the service owns its HTTP port before starting
 // background workers with external side effects.
 func (s *Server) Listen(ctx context.Context) (net.Listener, error) {
+	if err := s.validateInitialized(); err != nil {
+		return nil, err
+	}
 	var listenConfig net.ListenConfig
 	return listenConfig.Listen(ctx, "tcp", s.httpServer.Addr)
 }
 
 // Serve starts the configured HTTP server on an already-bound listener.
 func (s *Server) Serve(listener net.Listener) error {
+	if err := s.validateInitialized(); err != nil {
+		return err
+	}
 	if listener == nil {
 		return errors.New("http listener must not be nil")
 	}
@@ -193,6 +209,9 @@ func (s *Server) Serve(listener net.Listener) error {
 // ListenAndServe starts the configured HTTP server. Prefer Listen + Serve at
 // composition roots that must order background-worker startup after port bind.
 func (s *Server) ListenAndServe() error {
+	if err := s.validateInitialized(); err != nil {
+		return err
+	}
 	return s.httpServer.ListenAndServe()
 }
 
@@ -201,6 +220,9 @@ func (s *Server) ListenAndServe() error {
 // connections before returning so dependency teardown cannot race indefinitely
 // with still-connected request handlers.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.validateInitialized(); err != nil {
+		return err
+	}
 	err := s.httpServer.Shutdown(ctx)
 	if err == nil {
 		return nil
