@@ -20,8 +20,7 @@ func Validate(id string) error {
 	if id == "" {
 		return errInvalid
 	}
-	if textproto.TrimString(id) != id || strings.ContainsAny(id, "
-") {
+	if textproto.TrimString(id) != id || strings.ContainsAny(id, "\r\n") {
 		return errInvalid
 	}
 	return nil
