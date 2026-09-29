@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -62,8 +63,14 @@ func (c ConsumerConfig) Validate() error {
 	if strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("consumer filter and quarantine subjects must not be empty")
 	}
-	if c.FilterSubject == c.QuarantineSubject {
-		return fmt.Errorf("consumer filter and quarantine subject must differ")
+	if err := natssubject.ValidatePattern(c.FilterSubject); err != nil {
+		return fmt.Errorf("consumer filter subject is invalid: %w", err)
+	}
+	if err := natssubject.ValidateLiteral(c.QuarantineSubject); err != nil {
+		return fmt.Errorf("consumer quarantine subject is invalid: %w", err)
+	}
+	if natssubject.PatternMatchesLiteral(c.FilterSubject, c.QuarantineSubject) {
+		return fmt.Errorf("consumer filter subject must not match quarantine subject")
 	}
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("consumer limits must be positive")
