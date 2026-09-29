@@ -99,7 +99,7 @@ func New(
 	router.Use(safeRecoverer(logger))
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
-	api := humachi.New(router, newAPIConfig())
+	api := humachi.New(router, newAPIConfig(cfg.DocsEnabled))
 	registerHealth(api, ready)
 	registerVersion(api, info)
 
@@ -150,8 +150,17 @@ func validClientRequestID(value string) bool {
 	return true
 }
 
-func newAPIConfig() huma.Config {
+func newAPIConfig(docsEnabled bool) huma.Config {
 	cfg := huma.DefaultConfig("Go Service API", apiVersion)
+	if !docsEnabled {
+		cfg.OpenAPIPath = ""
+		cfg.DocsPath = ""
+		cfg.SchemasPath = ""
+		// DefaultConfig installs one CreateHook whose only purpose is adding
+		// schema links to responses. With SchemasPath disabled, retaining that
+		// hook would generate broken root-relative schema links.
+		cfg.CreateHooks = nil
+	}
 	cfg.Transformers = append(cfg.Transformers, transformHumaError)
 	return cfg
 }
