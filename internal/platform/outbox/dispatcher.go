@@ -47,8 +47,8 @@ func (c DispatcherConfig) Validate() error {
 	if c.MaxAttempts <= 0 {
 		return errors.New("outbox dispatcher max attempts must be positive")
 	}
-	if c.RetryBaseDelay <= 0 || c.RetryMaxDelay <= 0 {
-		return errors.New("outbox dispatcher retry delays must be positive")
+	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
+		return errors.New("outbox dispatcher retry delays must be at least one microsecond")
 	}
 	if c.RetryMaxDelay < c.RetryBaseDelay || c.RetryMaxDelay > maxClaimLease {
 		return errors.New("outbox dispatcher retry max delay is outside allowed bounds")
