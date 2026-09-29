@@ -415,6 +415,29 @@ func TestDispatcherConfigRejectsLeaseWithoutClaimBudget(t *testing.T) {
 	}
 }
 
+func TestDispatcherConfigRejectsLeaseSlackLostAtStoragePrecision(t *testing.T) {
+	t.Parallel()
+
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          3*time.Second + time.Nanosecond,
+		MaxAttempts:    1,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: time.Second,
+		StoreTimeout:   time.Second,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want persisted-lease precision error")
+	}
+
+	cfg.Lease = 3*time.Second + time.Microsecond
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() with one-microsecond lease slack error = %v", err)
+	}
+}
+
 func TestDispatcherConfigRejectsOverflowingTimeoutBudget(t *testing.T) {
 	t.Parallel()
 
