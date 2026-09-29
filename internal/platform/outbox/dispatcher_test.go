@@ -11,14 +11,15 @@ import (
 )
 
 type fakeEventStore struct {
-	mu        sync.Mutex
-	claims    [][]ClaimedEvent
-	claimErr  error
-	claimFn   func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
-	published []ClaimedEvent
-	retried   []retryCall
-	failed    []ClaimedEvent
-	settleErr error
+	mu              sync.Mutex
+	claims          [][]ClaimedEvent
+	claimErr        error
+	claimFn         func(context.Context, ClaimConfig) ([]ClaimedEvent, error)
+	published       []ClaimedEvent
+	retried         []retryCall
+	failed          []ClaimedEvent
+	settleErr       error
+	markPublishedFn func(context.Context, ClaimedEvent) error
 }
 
 type retryCall struct {
@@ -43,7 +44,10 @@ func (s *fakeEventStore) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedE
 	return out, nil
 }
 
-func (s *fakeEventStore) MarkPublished(_ context.Context, event ClaimedEvent) error {
+func (s *fakeEventStore) MarkPublished(ctx context.Context, event ClaimedEvent) error {
+	if s.markPublishedFn != nil {
+		return s.markPublishedFn(ctx, event)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.settleErr != nil {
@@ -159,6 +163,81 @@ func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
 	}
 	if len(store.published) != 2 {
 		t.Fatalf("published settlements = %d, want 2", len(store.published))
+	}
+}
+
+func TestDispatcherCancelsSiblingPublishAfterFatalSettlementFailure(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("database unavailable")
+	secondStarted := make(chan struct{})
+	secondCanceled := make(chan struct{})
+
+	store := &fakeEventStore{}
+	store.markPublishedFn = func(_ context.Context, event ClaimedEvent) error {
+		if event.ID == 1 {
+			return sentinel
+		}
+		store.mu.Lock()
+		defer store.mu.Unlock()
+		store.published = append(store.published, event)
+		return nil
+	}
+
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(ctx context.Context, _ string, eventID string, _ []byte) error {
+			switch eventID {
+			case "event-1":
+				<-secondStarted
+				return nil
+			case "event-2":
+				close(secondStarted)
+				<-ctx.Done()
+				close(secondCanceled)
+				return ctx.Err()
+			default:
+				t.Fatalf("unexpected event ID %q", eventID)
+				return nil
+			}
+		},
+		nil,
+	)
+
+	err := dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{
+		{
+			ID:        1,
+			EventID:   "event-1",
+			Subject:   "example.1",
+			Attempts:  1,
+			LockToken: "token-1",
+		},
+		{
+			ID:        2,
+			EventID:   "event-2",
+			Subject:   "example.2",
+			Attempts:  1,
+			LockToken: "token-2",
+		},
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("dispatchBatch() error = %v, want settlement failure", err)
+	}
+
+	select {
+	case <-secondCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("sibling publisher did not observe batch cancellation")
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.retried) != 1 || store.retried[0].event.EventID != "event-2" {
+		t.Fatalf("canceled sibling retries = %#v, want event-2 retry", store.retried)
+	}
+	if len(store.failed) != 0 {
+		t.Fatalf("canceled sibling failed settlements = %d, want 0", len(store.failed))
 	}
 }
 

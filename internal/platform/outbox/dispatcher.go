@@ -141,18 +141,27 @@ func (d *Dispatcher) dispatchBatch(
 	ctx context.Context,
 	events []ClaimedEvent,
 ) error {
+	batchCtx, cancelBatch := context.WithCancel(ctx)
+	defer cancelBatch()
+
 	results := make(chan error, len(events))
 	for _, event := range events {
 		go func(event ClaimedEvent) {
-			results <- d.dispatchOne(ctx, event)
+			results <- d.dispatchOne(batchCtx, event)
 		}(event)
 	}
 
 	var firstErr error
 	for range events {
-		if err := <-results; err != nil && firstErr == nil {
-			firstErr = err
+		err := <-results
+		if err == nil || firstErr != nil {
+			continue
 		}
+		firstErr = err
+		// dispatchOne only returns fatal publisher/storage/settlement
+		// failures. Stop sibling broker work immediately, but keep draining
+		// every result so each canceled claim can attempt bounded settlement.
+		cancelBatch()
 	}
 	return firstErr
 }
