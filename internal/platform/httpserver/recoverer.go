@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Lamy210/go-template/internal/httpmethod"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -29,7 +30,7 @@ func safeRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 					r.Context(),
 					"http handler panic",
 					"request_id", middleware.GetReqID(r.Context()),
-					"method", r.Method,
+					"method", httpmethod.LowCardinality(r.Method),
 				)
 
 				if responseStarted(w) ||
