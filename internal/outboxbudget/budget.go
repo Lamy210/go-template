@@ -4,6 +4,8 @@ package outboxbudget
 
 import "time"
 
+const postgresIntervalPrecision = time.Microsecond
+
 // LeaseCoversClaimPublishSettlement reports whether one outbox lease is strictly
 // longer than the worst-case bounded claim, publish, and settlement sequence.
 //
@@ -14,8 +16,12 @@ func LeaseCoversClaimPublishSettlement(
 	publishTimeout time.Duration,
 	storeTimeout time.Duration,
 ) bool {
+	// Store.Claim serializes the lease as an integer PostgreSQL microsecond
+	// interval. Validate against that effective value, not the higher-precision
+	// Go duration, so sub-microsecond slack cannot disappear at persistence.
+	effectiveLease := lease.Truncate(postgresIntervalPrecision)
 	return coversStrictly(
-		lease,
+		effectiveLease,
 		storeTimeout,
 		publishTimeout,
 		storeTimeout,

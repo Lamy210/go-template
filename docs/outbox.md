@@ -132,6 +132,12 @@ The lease must strictly exceed the full claim-to-settlement budget:
 
 The lease starts while the claim transaction is executing, so omitting claim
 time can leave too little lease remaining for a bounded publish plus settlement.
+
+PostgreSQL lease intervals are persisted as integer microseconds. Validation uses
+that persisted precision rather than Go's nanosecond duration precision. A
+configuration whose only safety margin is less than one microsecond is rejected,
+because that margin would be truncated away before `locked_until` is stored.
+
 Shutdown timeout is different: shutdown only needs to finish work that is
 already claimed, so it must strictly exceed publish timeout + one store timeout.
 
