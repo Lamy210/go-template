@@ -98,6 +98,37 @@ func TestLoadOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidLogLevel(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		if key == "LOG_LEVEL" {
+			return "trace", true
+		}
+		return "", false
+	})
+	if err == nil || !strings.Contains(err.Error(), "LOG_LEVEL") {
+		t.Fatalf("load error = %v, want LOG_LEVEL validation error", err)
+	}
+}
+
+func TestLoadAcceptsSlogLevelOffset(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(func(key string) (string, bool) {
+		if key == "LOG_LEVEL" {
+			return "debug+2", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("load error = %v", err)
+	}
+	if cfg.LogLevel != "DEBUG+2" {
+		t.Fatalf("LogLevel = %q, want DEBUG+2", cfg.LogLevel)
+	}
+}
+
 func TestLoadRejectsInvalidHTTPDocsFlag(t *testing.T) {
 	t.Parallel()
 
