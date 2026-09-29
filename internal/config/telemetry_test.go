@@ -1,6 +1,9 @@
 package config
 
 import (
+	"errors"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,6 +64,27 @@ func TestTelemetryEnabledLoadsBoundedSettings(t *testing.T) {
 	}
 	if cfg.TraceMaxExportBatchSize != 256 {
 		t.Fatalf("TraceMaxExportBatchSize = %d, want 256", cfg.TraceMaxExportBatchSize)
+	}
+}
+
+func TestTelemetryEndpointParseErrorRedactsRawValue(t *testing.T) {
+	t.Parallel()
+
+	const secret = "otel-secret-marker"
+	cfg := defaultTelemetryConfig()
+	cfg.Enabled = true
+	cfg.Endpoint = "https://" + secret + "@collector.example.com/%zz"
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() error = nil, want malformed endpoint error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("Validate() error exposed raw endpoint: %q", err.Error())
+	}
+
+	if _, ok := errors.AsType[*url.Error](err); !ok {
+		t.Fatalf("Validate() error = %T, want wrapped *url.Error", err)
 	}
 }
 

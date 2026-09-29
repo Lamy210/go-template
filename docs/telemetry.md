@@ -158,3 +158,6 @@ rejected. Use standard OTLP header environment variables or the collector's
 supported authentication mechanism instead.
 
 The application never logs the configured endpoint or raw exporter errors.
+Malformed endpoint parse failures also keep the underlying parse cause available
+for programmatic inspection without copying the raw configured URL into normal
+error text or startup logs.

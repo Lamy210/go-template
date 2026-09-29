@@ -41,6 +41,18 @@ type TelemetryConfig struct {
 	ShutdownTimeout         time.Duration
 }
 
+type telemetryEndpointParseError struct {
+	cause error
+}
+
+func (*telemetryEndpointParseError) Error() string {
+	return "parse OTEL_EXPORTER_OTLP_ENDPOINT"
+}
+
+func (e *telemetryEndpointParseError) Unwrap() error {
+	return e.cause
+}
+
 func loadTelemetry(lookup lookupEnv) (TelemetryConfig, error) {
 	enabled, err := boolValue(lookup, "TELEMETRY_ENABLED", defaultTelemetryEnabled)
 	if err != nil {
@@ -189,7 +201,10 @@ func (c TelemetryConfig) Validate() error {
 
 	endpoint, err := url.Parse(strings.TrimSpace(c.Endpoint))
 	if err != nil {
-		return fmt.Errorf("parse OTEL_EXPORTER_OTLP_ENDPOINT: %w", err)
+		// net/url parse errors can include the original URL. Keep the cause
+		// available for errors.Is/errors.AsType without copying a potentially
+		// credential-bearing endpoint into normal error/log text.
+		return &telemetryEndpointParseError{cause: err}
 	}
 	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must use http or https")
