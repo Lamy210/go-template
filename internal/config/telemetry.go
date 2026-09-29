@@ -202,7 +202,7 @@ func (c TelemetryConfig) Validate() error {
 	endpoint, err := url.Parse(strings.TrimSpace(c.Endpoint))
 	if err != nil {
 		// net/url parse errors can include the original URL. Keep the cause
-		// available for errors.Is/errors.As without copying a potentially
+		// available for errors.Is/errors.AsType without copying a potentially
 		// credential-bearing endpoint into normal error/log text.
 		return &telemetryEndpointParseError{cause: err}
 	}
