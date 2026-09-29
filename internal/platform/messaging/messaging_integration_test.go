@@ -148,7 +148,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 	stream := messaging.StreamConfig{
 		Name:            "TEMPLATE_EVENTS",
 		Subjects:        []string{"template.events.>"},
-		MaxConsumers:    8,
+		MaxConsumers:    16,
 		MaxMessages:     1_000,
 		MaxBytes:        16 << 20,
 		MaxAge:          time.Hour,
