@@ -181,21 +181,8 @@ func (c *Client) publishMessage(
 	msg *nats.Msg,
 	msgID string,
 ) (*jetstream.PubAck, error) {
-	operationCtx := ctx
-	endOperation := func(error) {}
-	if c.tracer != nil {
-		operationCtx, endOperation = c.tracer.StartPublish(ctx, msg.Subject)
-		if operationCtx == nil {
-			operationCtx = ctx
-		}
-		if endOperation == nil {
-			endOperation = func(error) {}
-		}
-	}
-
-	if c.propagator != nil {
-		c.propagator.Inject(operationCtx, natsHeaderCarrier{header: msg.Header})
-	}
+	operationCtx, endOperation := c.startPublishOperationSafely(ctx, msg.Subject)
+	c.injectPropagationSafely(operationCtx, msg.Header)
 
 	publishCtx, cancel := context.WithTimeout(operationCtx, c.requestTimeout)
 	defer cancel()
