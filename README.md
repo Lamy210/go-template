@@ -95,6 +95,7 @@ For local messaging integration:
 ```bash
 make nats-up
 make test-messaging
+make test-outbox
 make nats-down
 ```
 
