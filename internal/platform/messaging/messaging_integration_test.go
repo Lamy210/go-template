@@ -477,6 +477,93 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses durable consumer configuration drift", func(t *testing.T) {
+		cfg := workerConfig(stream, "drift-worker", "template.events.consumer-drift")
+
+		adminConn, err := nats.Connect(natsURL, nats.Timeout(2*time.Second))
+		if err != nil {
+			t.Fatalf("open consumer admin nats connection: %v", err)
+		}
+		defer adminConn.Close()
+
+		adminJS, err := jetstream.New(adminConn)
+		if err != nil {
+			t.Fatalf("create consumer admin jetstream client: %v", err)
+		}
+
+		adminConsumer, err := adminJS.CreateConsumer(
+			ctx,
+			stream.Name,
+			jetstream.ConsumerConfig{
+				Durable:       cfg.Durable,
+				Description:   "operator-owned description",
+				DeliverPolicy: jetstream.DeliverAllPolicy,
+				AckPolicy:     jetstream.AckExplicitPolicy,
+				AckWait:       cfg.AckWait,
+				MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts,
+				FilterSubject: cfg.FilterSubject,
+				ReplayPolicy:  jetstream.ReplayInstantPolicy,
+				MaxAckPending: cfg.MaxAckPending,
+			},
+		)
+		if err != nil {
+			t.Fatalf("create admin durable consumer: %v", err)
+		}
+		info := adminConsumer.CachedInfo()
+		if info == nil {
+			t.Fatal("admin consumer info is unavailable")
+		}
+		baselineConfig := info.Config
+
+		driftedConfig := baselineConfig
+		driftedConfig.MaxAckPending = cfg.MaxAckPending + 1
+		if _, err := adminJS.UpdateConsumer(ctx, stream.Name, driftedConfig); err != nil {
+			t.Fatalf("drift durable consumer through admin API: %v", err)
+		}
+
+		err = client.RunConsumer(
+			ctx,
+			cfg,
+			func(context.Context, messaging.Message) error { return nil },
+		)
+		if !errors.Is(err, messaging.ErrConsumerConfigDrift) {
+			t.Fatalf(
+				"RunConsumer() drift error = %v, want messaging.ErrConsumerConfigDrift",
+				err,
+			)
+		}
+
+		driftedConsumer, err := adminJS.Consumer(ctx, stream.Name, cfg.Durable)
+		if err != nil {
+			t.Fatalf("reload drifted durable consumer: %v", err)
+		}
+		driftedInfo := driftedConsumer.CachedInfo()
+		if driftedInfo == nil {
+			t.Fatal("drifted consumer info is unavailable")
+		}
+		if driftedInfo.Config.MaxAckPending != driftedConfig.MaxAckPending {
+			t.Fatalf(
+				"RunConsumer() silently reconciled MaxAckPending to %d; want drifted %d",
+				driftedInfo.Config.MaxAckPending,
+				driftedConfig.MaxAckPending,
+			)
+		}
+
+		if _, err := adminJS.UpdateConsumer(ctx, stream.Name, baselineConfig); err != nil {
+			t.Fatalf("restore durable consumer through admin API: %v", err)
+		}
+
+		acceptedCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+		defer cancel()
+		if err := client.RunConsumer(
+			acceptedCtx,
+			cfg,
+			func(context.Context, messaging.Message) error { return nil },
+		); err != nil {
+			t.Fatalf("RunConsumer() after explicit consumer restore: %v", err)
+		}
+	})
+
 	if err := client.ReadinessCheck(stream, time.Second)(ctx); err != nil {
 		t.Fatalf("nats readiness: %v", err)
 	}
