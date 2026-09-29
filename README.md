@@ -142,7 +142,7 @@ make vuln
 make build
 ```
 
-GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, lint, vulnerability scanning, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, external-database integration, self-contained Testcontainers integration, real NATS JetStream integration, and combined PostgreSQL + JetStream outbox dispatch integration.
+GitHub Actions runs module consistency, formatting, vet, race-enabled tests, metadata-injected binary build, Docker build, hardened container runtime smoke testing (non-root, read-only root filesystem, dropped capabilities, no-new-privileges), lint, vulnerability scanning, Compose validation, sqlc generation, migration integrity, fresh PostgreSQL migration, schema drift detection, external-database integration, self-contained Testcontainers integration, real NATS JetStream integration, and combined PostgreSQL + JetStream outbox dispatch integration.
 
 ## Repository layout
 

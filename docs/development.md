@@ -35,6 +35,7 @@ fix(config): reject invalid timeout values
 - Pass `context.Context` through I/O paths; do not use it as a dependency container.
 - Avoid hidden globals for database handles, loggers, configuration, or error-model mutation.
 - Bound concurrency, retries, request sizes, and timeouts.
+- Keep the runtime container compatible with a non-root user, read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`.
 - Never log secrets, passwords, access tokens, authorization headers, raw URL paths by default, or raw dependency errors that may contain sensitive values.
 - Use `errors.Is` / `errors.AsType` for wrapped-error inspection rather than branching on error strings.
 
