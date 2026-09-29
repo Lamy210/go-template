@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -139,6 +140,10 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.HTTP.Addr) == "" {
 		return fmt.Errorf("HTTP_ADDR must not be empty")
+	}
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(c.LogLevel)); err != nil {
+		return fmt.Errorf("LOG_LEVEL is invalid: %w", err)
 	}
 	if c.HTTP.ReadHeaderTimeout <= 0 {
 		return fmt.Errorf("HTTP_READ_HEADER_TIMEOUT must be positive")
