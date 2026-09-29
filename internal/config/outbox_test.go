@@ -82,9 +82,9 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 			},
 		},
 		{
-			name: "lease not longer than publish plus store",
+			name: "lease omits claim store budget",
 			mutate: func(cfg *OutboxConfig) {
-				cfg.Lease = cfg.PublishTimeout + cfg.StoreTimeout
+				cfg.Lease = cfg.PublishTimeout + cfg.StoreTimeout + time.Nanosecond
 			},
 		},
 		{
