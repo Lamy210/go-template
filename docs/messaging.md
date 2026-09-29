@@ -64,6 +64,11 @@ stream retention/size limits, replace subjects, or alter a worker's ack/retry
 contract. Managed drift fails startup until an operator performs the intended
 JetStream migration.
 
+Stream and durable consumer names are validated against the nats.go v1.54.0
+JetStream name grammar before broker I/O. Wildcards, dots, whitespace, slashes,
+and backslashes are rejected locally instead of surfacing as server-side
+provisioning failures.
+
 The application does not register a fake business consumer. Consumer handlers
 belong to a feature/application package and call `RunConsumer` with the
 durable/filter policy they own. This keeps the NATS profile reusable and
