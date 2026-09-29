@@ -97,6 +97,13 @@ function only when PostgreSQL, NATS, and the dispatcher profile are all enabled.
 Each claimed batch is dispatched concurrently. The configured batch size is
 therefore also the upper bound on dispatcher publish concurrency.
 
+If any event returns a fatal publisher/storage/settlement error, the dispatcher
+cancels the shared batch context immediately. Sibling publish calls that honor
+context stop early instead of creating additional broker side effects while
+durable state is already known to be uncertain. The dispatcher still drains all
+batch results so every canceled claim can attempt its bounded retry/settlement
+transition before the fatal error is returned to the process lifecycle.
+
 The default dispatcher bounds are:
 
 - batch size: 8;
@@ -240,5 +247,5 @@ The combined PostgreSQL + real JetStream integration verifies:
 - bounded dispatcher shutdown.
 
 Unit tests additionally verify bounded claim contexts, concurrent batch
-dispatch, exponential retry capping, cancellation retry, and sanitized
-settlement failures.
+dispatch, sibling cancellation after fatal settlement failure, exponential
+retry capping, cancellation retry, and sanitized settlement failures.
