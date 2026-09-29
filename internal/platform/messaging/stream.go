@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -28,6 +29,9 @@ type StreamConfig struct {
 func (c StreamConfig) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("stream name must not be empty")
+	}
+	if err := natsname.Validate(c.Name); err != nil {
+		return fmt.Errorf("stream name is invalid: %w", err)
 	}
 	if len(c.Subjects) == 0 {
 		return fmt.Errorf("stream subjects must not be empty")
