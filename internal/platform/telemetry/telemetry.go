@@ -13,6 +13,7 @@ import (
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
+	"github.com/Lamy210/go-template/internal/httpmethod"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -247,20 +248,7 @@ func (*Provider) ObserveHTTPRoute(ctx context.Context, method, route string) {
 }
 
 func httpSpanMethod(method string) string {
-	switch method {
-	case http.MethodConnect,
-		http.MethodDelete,
-		http.MethodGet,
-		http.MethodHead,
-		http.MethodOptions,
-		http.MethodPatch,
-		http.MethodPost,
-		http.MethodPut,
-		http.MethodTrace:
-		return method
-	default:
-		return "HTTP"
-	}
+	return httpmethod.LowCardinality(method)
 }
 
 // Inject writes the active cross-process context into a transport-neutral carrier.

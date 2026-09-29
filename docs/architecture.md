@@ -135,7 +135,9 @@ Access logging follows the same low-cardinality boundary: matched requests log
 the chi route template, while unmatched requests log a fixed `<unmatched>`
 marker. Raw `URL.Path` is deliberately excluded from default logs because path
 segments may contain identifiers, personal data, secrets, or attacker-controlled
-high-cardinality values.
+high-cardinality values. HTTP methods use the shared stdlib-only
+`internal/httpmethod` policy: standard methods are preserved and every unknown
+token is collapsed to the fixed `HTTP` bucket for both access logs and telemetry.
 
 Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
 

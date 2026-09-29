@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/httpmethod"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -643,6 +644,38 @@ func TestAccessLogUsesResolvedRoutePattern(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "12345") {
 		t.Fatalf("access log exposed raw path parameter: %s", logs.String())
+	}
+}
+
+func TestAccessLogNormalizesUnknownMethod(t *testing.T) {
+	t.Parallel()
+
+	const rawMethod = "BREW-tenant-12345"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	router := chi.NewRouter()
+	router.Use(accessLog(logger, nil, nil))
+	router.Get("/custom", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(rawMethod, "/custom", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusMethodNotAllowed)
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("decode access log: %v; log=%s", err, logs.String())
+	}
+	if entry["method"] != httpmethod.Other {
+		t.Fatalf("method = %v, want %q", entry["method"], httpmethod.Other)
+	}
+	if strings.Contains(logs.String(), rawMethod) {
+		t.Fatalf("access log exposed raw unknown method: %s", logs.String())
 	}
 }
 
