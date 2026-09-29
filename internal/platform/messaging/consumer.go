@@ -291,30 +291,17 @@ func (c *Client) handleDelivery(
 		return
 	}
 
-	deliveryCtx := parent
-	if c.propagator != nil {
-		deliveryCtx = c.propagator.Extract(
-			parent,
-			natsHeaderCarrier{header: msg.Headers()},
-		)
-	}
+	deliveryCtx := c.extractPropagationSafely(parent, msg.Headers())
 
 	if metadata.NumDelivered > processAttempts {
 		c.quarantine(deliveryCtx, cfg, totalAttempts, msg, metadata, reportFatal)
 		return
 	}
 
-	processCtx := deliveryCtx
-	endOperation := func(error) {}
-	if c.tracer != nil {
-		processCtx, endOperation = c.tracer.StartProcess(deliveryCtx, msg.Subject())
-		if processCtx == nil {
-			processCtx = deliveryCtx
-		}
-		if endOperation == nil {
-			endOperation = func(error) {}
-		}
-	}
+	processCtx, endOperation := c.startProcessOperationSafely(
+		deliveryCtx,
+		msg.Subject(),
+	)
 
 	handlerCtx, cancel := context.WithTimeout(processCtx, cfg.HandlerTimeout)
 	handlerErr := invokeHandler(handlerCtx, handler, Message{
