@@ -141,6 +141,55 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 	}
 }
 
+func TestStreamConfigRejectsInvalidSubjectPattern(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig().Stream
+	cfg.Subjects = []string{"events.>.invalid"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want invalid subject pattern error")
+	}
+}
+
+func TestConsumerConfigRejectsQuarantineRecapture(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*ConsumerConfig)
+	}{
+		{
+			name: "wildcard filter captures quarantine",
+			mutate: func(cfg *ConsumerConfig) {
+				cfg.FilterSubject = "events.>"
+			},
+		},
+		{
+			name: "quarantine subject is wildcard",
+			mutate: func(cfg *ConsumerConfig) {
+				cfg.QuarantineSubject = "events.*"
+			},
+		},
+		{
+			name: "invalid filter wildcard placement",
+			mutate: func(cfg *ConsumerConfig) {
+				cfg.FilterSubject = "events.>.work"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := testConsumerConfig()
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want subject isolation error")
+			}
+		})
+	}
+}
+
 func TestManagedStreamConfigMatchesManagedFields(t *testing.T) {
 	t.Parallel()
 
