@@ -214,7 +214,7 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 		if !managedStreamConfigMatches(info.Config, streamConfig) {
 			return newOperationError(
 				"required jetstream stream configuration drift",
-				errors.New("managed stream configuration differs"),
+				ErrStreamConfigDrift,
 			)
 		}
 		return nil

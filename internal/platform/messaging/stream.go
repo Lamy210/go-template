@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -39,7 +40,12 @@ func (c StreamConfig) Validate() error {
 	return nil
 }
 
-// EnsureStream creates or updates a bounded file-backed JetStream stream.
+// ErrStreamConfigDrift means an existing JetStream stream differs in one or
+// more fields managed by this template.
+var ErrStreamConfigDrift = errors.New("managed jetstream stream configuration differs")
+
+// EnsureStream creates the bounded file-backed JetStream stream when it is
+// missing. An existing stream is verified but never updated implicitly.
 func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -48,9 +54,43 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
 
-	_, err := c.js.CreateOrUpdateStream(requestCtx, managedStreamConfig(cfg))
+	stream, err := c.js.Stream(requestCtx, cfg.Name)
+	if err == nil {
+		return verifyManagedStream(stream, cfg)
+	}
+	if !errors.Is(err, jetstream.ErrStreamNotFound) {
+		return newOperationError("query required jetstream stream", err)
+	}
+
+	stream, err = c.js.CreateStream(requestCtx, managedStreamConfig(cfg))
 	if err != nil {
-		return newOperationError("create or update jetstream stream", err)
+		if !errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+			return newOperationError("create jetstream stream", err)
+		}
+
+		// Another instance may have created the stream between the lookup and
+		// create calls. Re-read it and apply the same managed-field check.
+		stream, err = c.js.Stream(requestCtx, cfg.Name)
+		if err != nil {
+			return newOperationError("query concurrently created jetstream stream", err)
+		}
+	}
+	return verifyManagedStream(stream, cfg)
+}
+
+func verifyManagedStream(stream jetstream.Stream, cfg StreamConfig) error {
+	info := stream.CachedInfo()
+	if info == nil {
+		return newOperationError(
+			"read required jetstream stream configuration",
+			errors.New("stream information unavailable"),
+		)
+	}
+	if !managedStreamConfigMatches(info.Config, cfg) {
+		return newOperationError(
+			"required jetstream stream configuration drift",
+			ErrStreamConfigDrift,
+		)
 	}
 	return nil
 }
