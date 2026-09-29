@@ -30,6 +30,10 @@ func (handlerPanicError) Error() string {
 	return "messaging handler panicked"
 }
 
+// ErrConsumerConfigDrift means an existing durable consumer differs in one or
+// more fields managed by this template.
+var ErrConsumerConfigDrift = errors.New("managed jetstream consumer configuration differs")
+
 // ConsumerConfig configures one durable pull consumer and its retry/quarantine
 // policy.
 type ConsumerConfig struct {
@@ -94,18 +98,9 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		return err
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
-	consumer, err := c.js.CreateOrUpdateConsumer(requestCtx, cfg.Stream.Name, jetstream.ConsumerConfig{
-		Durable:       cfg.Durable,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       cfg.AckWait,
-		MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts,
-		MaxAckPending: cfg.MaxAckPending,
-		FilterSubject: cfg.FilterSubject,
-	})
-	cancel()
+	consumer, err := c.ensureConsumer(ctx, cfg)
 	if err != nil {
-		return newOperationError("create or update jetstream consumer", err)
+		return err
 	}
 
 	fatal := make(chan error, 1)
@@ -175,6 +170,99 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 			)
 		}
 	}
+}
+
+func (c *Client) ensureConsumer(
+	ctx context.Context,
+	cfg ConsumerConfig,
+) (jetstream.Consumer, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
+	defer cancel()
+
+	consumer, err := c.js.Consumer(requestCtx, cfg.Stream.Name, cfg.Durable)
+	if err == nil {
+		return verifyManagedConsumer(consumer, cfg)
+	}
+	if !errors.Is(err, jetstream.ErrConsumerNotFound) {
+		return nil, newOperationError("query durable jetstream consumer", err)
+	}
+
+	consumer, err = c.js.CreateConsumer(
+		requestCtx,
+		cfg.Stream.Name,
+		managedConsumerConfig(cfg),
+	)
+	if err != nil {
+		if !errors.Is(err, jetstream.ErrConsumerExists) {
+			return nil, newOperationError("create durable jetstream consumer", err)
+		}
+
+		// Another instance may have created the durable between lookup and
+		// create. Re-read it and apply the same managed-field verification.
+		consumer, err = c.js.Consumer(requestCtx, cfg.Stream.Name, cfg.Durable)
+		if err != nil {
+			return nil, newOperationError(
+				"query concurrently created jetstream consumer",
+				err,
+			)
+		}
+	}
+
+	return verifyManagedConsumer(consumer, cfg)
+}
+
+func verifyManagedConsumer(
+	consumer jetstream.Consumer,
+	cfg ConsumerConfig,
+) (jetstream.Consumer, error) {
+	info := consumer.CachedInfo()
+	if info == nil {
+		return nil, newOperationError(
+			"read durable jetstream consumer configuration",
+			errors.New("consumer information unavailable"),
+		)
+	}
+	if !managedConsumerConfigMatches(info.Config, cfg) {
+		return nil, newOperationError(
+			"durable jetstream consumer configuration drift",
+			ErrConsumerConfigDrift,
+		)
+	}
+	return consumer, nil
+}
+
+func managedConsumerConfig(cfg ConsumerConfig) jetstream.ConsumerConfig {
+	return jetstream.ConsumerConfig{
+		Durable:       cfg.Durable,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		AckWait:       cfg.AckWait,
+		MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts,
+		FilterSubject: cfg.FilterSubject,
+		ReplayPolicy:  jetstream.ReplayInstantPolicy,
+		MaxAckPending: cfg.MaxAckPending,
+	}
+}
+
+func managedConsumerConfigMatches(
+	actual jetstream.ConsumerConfig,
+	desired ConsumerConfig,
+) bool {
+	expected := managedConsumerConfig(desired)
+
+	return actual.Durable == expected.Durable &&
+		actual.DeliverPolicy == expected.DeliverPolicy &&
+		actual.AckPolicy == expected.AckPolicy &&
+		actual.AckWait == expected.AckWait &&
+		actual.MaxDeliver == expected.MaxDeliver &&
+		len(actual.BackOff) == 0 &&
+		actual.FilterSubject == expected.FilterSubject &&
+		len(actual.FilterSubjects) == 0 &&
+		actual.ReplayPolicy == expected.ReplayPolicy &&
+		actual.MaxAckPending == expected.MaxAckPending &&
+		!actual.HeadersOnly &&
+		actual.DeliverSubject == "" &&
+		actual.DeliverGroup == ""
 }
 
 func (c *Client) handleDelivery(
