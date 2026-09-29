@@ -608,4 +608,3 @@ func TestDispatcherPreservesAllFatalBatchErrors(t *testing.T) {
 		t.Fatal("dispatchBatch() did not finish")
 	}
 }
-
