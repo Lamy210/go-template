@@ -88,6 +88,15 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "lease slack disappears at postgres precision",
+			mutate: func(cfg *OutboxConfig) {
+				cfg.Lease =
+					2*cfg.StoreTimeout +
+						cfg.PublishTimeout +
+						time.Nanosecond
+			},
+		},
+		{
 			name: "retry max below base",
 			mutate: func(cfg *OutboxConfig) {
 				cfg.RetryMaxDelay = cfg.RetryBaseDelay / 2
