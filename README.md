@@ -100,8 +100,8 @@ make nats-down
 ```
 
 The application opens NATS and creates the configured stream when missing only
-when `NATS_ENABLED=true`. Existing managed stream drift is rejected rather than
-silently updated, so stream migrations remain explicit operational changes. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker. When telemetry is also enabled, W3C Trace Context/Baggage is propagated through NATS headers and logical publish/process spans are created around messaging operations.
+when `NATS_ENABLED=true`. Existing managed stream or durable-consumer drift is rejected rather than
+silently updated, so JetStream migrations remain explicit operational changes. Business consumers remain feature-owned; the template provides the bounded JetStream infrastructure rather than hardwiring a generic worker. When telemetry is also enabled, W3C Trace Context/Baggage is propagated through NATS headers and logical publish/process spans are created around messaging operations.
 
 See [docs/messaging.md](docs/messaging.md).
 
