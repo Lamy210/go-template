@@ -67,6 +67,8 @@ TELEMETRY_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 make de
 
 Copy `.env.example` values into your process environment as needed. A `.env` file is intentionally ignored by Git.
 
+Local Compose publishes PostgreSQL, NATS client traffic, and the NATS monitoring endpoint on `127.0.0.1` only. If a test intentionally needs LAN/container-host access, override the port binding explicitly rather than weakening the template default.
+
 `make test-messaging` and `make test-outbox` use `NATS_URL` when it is already set; otherwise they default to `nats://127.0.0.1:4222`. The CI messaging/outbox jobs call these Make targets directly so local commands and CI cannot silently drift apart.
 
 The Huma Docs UI, OpenAPI documents, and schema routes are enabled by default for template usability. Production deployments that do not intentionally publish that surface can set `HTTP_DOCS_ENABLED=false`.
