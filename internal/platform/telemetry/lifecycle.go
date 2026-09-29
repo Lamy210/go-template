@@ -10,6 +10,11 @@ type lifecycleOperation struct {
 	run  func(context.Context) error
 }
 
+type lifecycleResult struct {
+	index int
+	err   error
+}
+
 func runLifecycleOperations(
 	ctx context.Context,
 	operations ...lifecycleOperation,
@@ -18,17 +23,23 @@ func runLifecycleOperations(
 		return nil
 	}
 
-	results := make(chan error, len(operations))
-	for _, operation := range operations {
-		go func(operation lifecycleOperation) {
-			err := operation.run(ctx)
-			results <- newOperationError(operation.name, err)
-		}(operation)
+	results := make(chan lifecycleResult, len(operations))
+	for index, operation := range operations {
+		go func(index int, operation lifecycleOperation) {
+			results <- lifecycleResult{
+				index: index,
+				err: newOperationError(
+					operation.name,
+					operation.run(ctx),
+				),
+			}
+		}(index, operation)
 	}
 
-	var joined error
+	errs := make([]error, len(operations))
 	for range operations {
-		joined = errors.Join(joined, <-results)
+		result := <-results
+		errs[result.index] = result.err
 	}
-	return joined
+	return errors.Join(errs...)
 }
