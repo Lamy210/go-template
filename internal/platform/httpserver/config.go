@@ -17,6 +17,7 @@ type Config struct {
 	IdleTimeout       time.Duration
 	MaxHeaderBytes    int
 	MaxBodyBytes      int64
+	DocsEnabled       bool
 }
 
 // Validate rejects server settings that would remove transport bounds or create

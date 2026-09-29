@@ -264,6 +264,52 @@ func TestOpenAPIEndpoint(t *testing.T) {
 	}
 }
 
+func TestDocsExposureCanBeDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConfig()
+	cfg.DocsEnabled = false
+	server := newTestServer(
+		t,
+		cfg,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+
+	for _, path := range []string{
+		"/docs",
+		"/openapi.json",
+		"/openapi.yaml",
+		"/schemas/HealthOutput.json",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want %d", path, res.Code, http.StatusNotFound)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /health/live status = %d, want %d; body=%s",
+			res.Code,
+			http.StatusOK,
+			res.Body.String(),
+		)
+	}
+	if got := res.Header().Get("Link"); got != "" {
+		t.Fatalf("GET /health/live Link header = %q, want empty", got)
+	}
+	if strings.Contains(res.Body.String(), "$schema") {
+		t.Fatalf("GET /health/live contains disabled $schema link: %s", res.Body.String())
+	}
+}
+
 func TestListenBindsConfiguredAddress(t *testing.T) {
 	t.Parallel()
 
@@ -658,6 +704,7 @@ func testConfig() Config {
 		IdleTimeout:       time.Second,
 		MaxHeaderBytes:    1 << 20,
 		MaxBodyBytes:      1 << 20,
+		DocsEnabled:       true,
 	}
 }
 

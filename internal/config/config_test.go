@@ -26,6 +26,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTP.ReadHeaderTimeout != defaultReadHeaderTimeout {
 		t.Fatalf("HTTP.ReadHeaderTimeout = %s, want %s", cfg.HTTP.ReadHeaderTimeout, defaultReadHeaderTimeout)
 	}
+	if !cfg.HTTP.DocsEnabled {
+		t.Fatal("HTTP.DocsEnabled = false, want true")
+	}
 	if cfg.Database.Enabled {
 		t.Fatal("Database.Enabled = true, want false")
 	}
@@ -46,6 +49,7 @@ func TestLoadOverrides(t *testing.T) {
 		"HTTP_MAX_HEADER_BYTES":     "2048",
 		"HTTP_MAX_BODY_BYTES":       "4096",
 		"HTTP_READ_HEADER_TIMEOUT":  "2s",
+		"HTTP_DOCS_ENABLED":         "false",
 		"DATABASE_ENABLED":          "true",
 		"DATABASE_URL":              "postgres://example.invalid/app",
 		"DATABASE_MAX_CONNS":        "20",
@@ -76,6 +80,9 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.HTTP.MaxBodyBytes != 4096 {
 		t.Fatalf("MaxBodyBytes = %d, want 4096", cfg.HTTP.MaxBodyBytes)
 	}
+	if cfg.HTTP.DocsEnabled {
+		t.Fatal("HTTP.DocsEnabled = true, want false")
+	}
 	if !cfg.Database.Enabled {
 		t.Fatal("Database.Enabled = false, want true")
 	}
@@ -87,6 +94,20 @@ func TestLoadOverrides(t *testing.T) {
 			"Database.ShutdownTimeout = %s, want 7s",
 			cfg.Database.ShutdownTimeout,
 		)
+	}
+}
+
+func TestLoadRejectsInvalidHTTPDocsFlag(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		if key == "HTTP_DOCS_ENABLED" {
+			return "not-a-bool", true
+		}
+		return "", false
+	})
+	if err == nil || !strings.Contains(err.Error(), "HTTP_DOCS_ENABLED") {
+		t.Fatalf("load error = %v, want HTTP_DOCS_ENABLED parse error", err)
 	}
 }
 

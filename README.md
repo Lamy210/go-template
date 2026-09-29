@@ -36,8 +36,8 @@ Useful endpoints:
 - `GET /health/live`
 - `GET /health/ready`
 - `GET /version`
-- `GET /openapi.json`
-- `GET /docs`
+- `GET /openapi.json` when `HTTP_DOCS_ENABLED=true`
+- `GET /docs` when `HTTP_DOCS_ENABLED=true`
 
 ## Error model
 
@@ -56,6 +56,8 @@ Configuration is read once at startup from environment variables. See `.env.exam
 `DATABASE_ENABLED=false`, `NATS_ENABLED=false`, `TELEMETRY_ENABLED=false`, and `OUTBOX_DISPATCH_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
+
+`HTTP_DOCS_ENABLED=true` preserves the development-friendly default Huma documentation surface. Set it to `false` when the service should not expose the built-in Docs UI, OpenAPI documents, or JSON Schema routes. Disabling the surface also disables Huma's response schema-link transformer so normal API responses do not retain broken or hidden schema links.
 
 ## PostgreSQL profile
 

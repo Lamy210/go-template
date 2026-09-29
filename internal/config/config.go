@@ -20,6 +20,7 @@ const (
 	defaultShutdownTimeout   = 15 * time.Second
 	defaultMaxHeaderBytes    = 1 << 20
 	defaultMaxBodyBytes      = 1 << 20
+	defaultHTTPDocsEnabled   = true
 )
 
 // Config contains process-wide configuration loaded once at startup.
@@ -44,6 +45,7 @@ type HTTPConfig struct {
 	ShutdownTimeout   time.Duration
 	MaxHeaderBytes    int
 	MaxBodyBytes      int64
+	DocsEnabled       bool
 }
 
 // Load reads configuration from environment variables and validates it.
@@ -82,6 +84,10 @@ func load(lookup lookupEnv) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	httpDocsEnabled, err := boolValue(lookup, "HTTP_DOCS_ENABLED", defaultHTTPDocsEnabled)
+	if err != nil {
+		return Config{}, err
+	}
 	databaseConfig, err := loadDatabase(lookup)
 	if err != nil {
 		return Config{}, err
@@ -112,6 +118,7 @@ func load(lookup lookupEnv) (Config, error) {
 			ShutdownTimeout:   shutdownTimeout,
 			MaxHeaderBytes:    maxHeaderBytes,
 			MaxBodyBytes:      maxBodyBytes,
+			DocsEnabled:       httpDocsEnabled,
 		},
 		Database:  databaseConfig,
 		NATS:      natsConfig,
