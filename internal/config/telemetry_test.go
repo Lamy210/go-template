@@ -83,8 +83,7 @@ func TestTelemetryEndpointParseErrorRedactsRawValue(t *testing.T) {
 		t.Fatalf("Validate() error exposed raw endpoint: %q", err.Error())
 	}
 
-	var parseErr *url.Error
-	if !errors.As(err, &parseErr) {
+	if _, ok := errors.AsType[*url.Error](err); !ok {
 		t.Fatalf("Validate() error = %T, want wrapped *url.Error", err)
 	}
 }
