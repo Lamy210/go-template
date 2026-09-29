@@ -246,6 +246,45 @@ func TestVersionEndpoint(t *testing.T) {
 	}
 }
 
+func TestDefaultResponsesDoNotExposeSchemaLinks(t *testing.T) {
+	t.Parallel()
+
+	server := newTestServer(
+		t,
+		testConfig(),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testServiceInfo(),
+		nil,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	req.Header.Set("X-Forwarded-Host", "attacker.example")
+	req.Header.Set("Forwarded", "host=forwarded-attacker.example")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf(
+			"GET /version status = %d, want %d; body=%s",
+			res.Code,
+			http.StatusOK,
+			res.Body.String(),
+		)
+	}
+	if got := res.Header().Get("Link"); got != "" {
+		t.Fatalf("GET /version Link header = %q, want empty", got)
+	}
+	for _, forbidden := range []string{
+		"$schema",
+		"attacker.example",
+		"forwarded-attacker.example",
+	} {
+		if strings.Contains(res.Body.String(), forbidden) {
+			t.Fatalf("GET /version response contains %q: %s", forbidden, res.Body.String())
+		}
+	}
+}
+
 func TestOpenAPIEndpoint(t *testing.T) {
 	t.Parallel()
 
