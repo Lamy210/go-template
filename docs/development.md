@@ -65,3 +65,5 @@ TELEMETRY_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 make de
 ```
 
 Copy `.env.example` values into your process environment as needed. A `.env` file is intentionally ignored by Git.
+
+The Huma Docs UI, OpenAPI documents, and schema routes are enabled by default for template usability. Production deployments that do not intentionally publish that surface can set `HTTP_DOCS_ENABLED=false`.
