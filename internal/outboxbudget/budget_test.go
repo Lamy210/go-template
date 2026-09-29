@@ -14,8 +14,14 @@ func TestLeaseCoversClaimPublishSettlement(t *testing.T) {
 	if LeaseCoversClaimPublishSettlement(9*time.Second, publish, store) {
 		t.Fatal("exact claim+publish+settlement budget must not be accepted")
 	}
-	if !LeaseCoversClaimPublishSettlement(9*time.Second+time.Nanosecond, publish, store) {
-		t.Fatal("strictly larger lease budget was rejected")
+	if LeaseCoversClaimPublishSettlement(9*time.Second+time.Nanosecond, publish, store) {
+		t.Fatal("sub-microsecond lease slack must not survive storage precision")
+	}
+	if LeaseCoversClaimPublishSettlement(9*time.Second+999*time.Nanosecond, publish, store) {
+		t.Fatal("sub-microsecond lease slack must be rejected")
+	}
+	if !LeaseCoversClaimPublishSettlement(9*time.Second+time.Microsecond, publish, store) {
+		t.Fatal("one-microsecond persisted lease slack was rejected")
 	}
 }
 
