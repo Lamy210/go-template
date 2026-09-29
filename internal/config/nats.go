@@ -5,6 +5,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/Lamy210/go-template/internal/natssubject"
 )
 
 const (
@@ -241,6 +243,11 @@ func (c NATSConfig) Validate() error {
 	if strings.TrimSpace(c.Stream) == "" || len(c.Subjects) == 0 {
 		return fmt.Errorf("NATS stream and subjects must not be empty")
 	}
+	for _, subject := range c.Subjects {
+		if err := natssubject.ValidatePattern(subject); err != nil {
+			return fmt.Errorf("NATS_SUBJECTS contains an invalid subject pattern: %w", err)
+		}
+	}
 	if c.MaxConsumers <= 0 || c.MaxMessages <= 0 || c.MaxBytes <= 0 || c.MaxMessageSize <= 0 {
 		return fmt.Errorf("NATS stream limits must be positive")
 	}
@@ -250,8 +257,14 @@ func (c NATSConfig) Validate() error {
 	if strings.TrimSpace(c.Durable) == "" || strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("NATS consumer names and subjects must not be empty")
 	}
-	if c.FilterSubject == c.QuarantineSubject {
-		return fmt.Errorf("NATS_FILTER_SUBJECT and NATS_QUARANTINE_SUBJECT must differ")
+	if err := natssubject.ValidatePattern(c.FilterSubject); err != nil {
+		return fmt.Errorf("NATS_FILTER_SUBJECT is invalid: %w", err)
+	}
+	if err := natssubject.ValidateLiteral(c.QuarantineSubject); err != nil {
+		return fmt.Errorf("NATS_QUARANTINE_SUBJECT is invalid: %w", err)
+	}
+	if natssubject.PatternMatchesLiteral(c.FilterSubject, c.QuarantineSubject) {
+		return fmt.Errorf("NATS_FILTER_SUBJECT must not match NATS_QUARANTINE_SUBJECT")
 	}
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("NATS consumer limits must be positive")

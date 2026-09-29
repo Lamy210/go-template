@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -30,6 +31,11 @@ func (c StreamConfig) Validate() error {
 	}
 	if len(c.Subjects) == 0 {
 		return fmt.Errorf("stream subjects must not be empty")
+	}
+	for _, subject := range c.Subjects {
+		if err := natssubject.ValidatePattern(subject); err != nil {
+			return fmt.Errorf("stream subject pattern is invalid: %w", err)
+		}
 	}
 	if c.MaxConsumers <= 0 || c.MaxMessages <= 0 || c.MaxBytes <= 0 || c.MaxMessageSize <= 0 {
 		return fmt.Errorf("stream limits must be positive")
