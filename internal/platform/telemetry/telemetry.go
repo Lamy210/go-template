@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -202,8 +203,9 @@ func (c Config) Validate() error {
 	if c.MetricInterval <= 0 || c.TraceBatchTimeout <= 0 {
 		return fmt.Errorf("telemetry metric and trace batch intervals must be positive")
 	}
-	if c.TraceSampleRatio < 0 || c.TraceSampleRatio > 1 {
-		return fmt.Errorf("telemetry trace sample ratio must be between 0 and 1")
+	if math.IsNaN(c.TraceSampleRatio) || math.IsInf(c.TraceSampleRatio, 0) ||
+		c.TraceSampleRatio < 0 || c.TraceSampleRatio > 1 {
+		return fmt.Errorf("telemetry trace sample ratio must be finite and between 0 and 1")
 	}
 	if c.TraceMaxQueueSize <= 0 || c.TraceMaxExportBatchSize <= 0 {
 		return fmt.Errorf("telemetry trace queue and batch sizes must be positive")

@@ -59,7 +59,7 @@ The SDK does not rely on unbounded buffering or retry behavior:
 
 All values are configurable through `.env.example`. Validation rejects a retry
 window longer than the export deadline, a trace batch larger than its queue,
-invalid sampling ratios, zero/unbounded request limits, and malformed endpoints.
+invalid or non-finite sampling ratios, zero/unbounded request limits, and malformed endpoints.
 
 ## Readiness policy
 

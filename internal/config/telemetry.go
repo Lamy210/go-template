@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -236,8 +237,9 @@ func (c TelemetryConfig) Validate() error {
 	if c.MetricInterval <= 0 {
 		return fmt.Errorf("TELEMETRY_METRIC_INTERVAL must be positive")
 	}
-	if c.TraceSampleRatio < 0 || c.TraceSampleRatio > 1 {
-		return fmt.Errorf("TELEMETRY_TRACE_SAMPLE_RATIO must be between 0 and 1")
+	if math.IsNaN(c.TraceSampleRatio) || math.IsInf(c.TraceSampleRatio, 0) ||
+		c.TraceSampleRatio < 0 || c.TraceSampleRatio > 1 {
+		return fmt.Errorf("TELEMETRY_TRACE_SAMPLE_RATIO must be finite and between 0 and 1")
 	}
 	if c.TraceMaxQueueSize <= 0 || c.TraceMaxExportBatchSize <= 0 {
 		return fmt.Errorf("telemetry trace queue and batch sizes must be positive")
