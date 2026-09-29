@@ -535,3 +535,77 @@ func mustDispatcher(
 	}
 	return dispatcher
 }
+
+func TestDispatcherPreservesAllFatalBatchErrors(t *testing.T) {
+	t.Parallel()
+
+	first := errors.New("first settlement failure")
+	second := errors.New("second settlement failure")
+	release := make(chan struct{})
+
+	store := &fakeEventStore{}
+	store.markPublishedFn = func(_ context.Context, event ClaimedEvent) error {
+		<-release
+		switch event.ID {
+		case 1:
+			return first
+		case 2:
+			return second
+		default:
+			return nil
+		}
+	}
+
+	started := make(chan struct{}, 2)
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			started <- struct{}{}
+			return nil
+		},
+		nil,
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{
+			{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.1",
+				Attempts:  1,
+				LockToken: "token-1",
+			},
+			{
+				ID:        2,
+				EventID:   "event-2",
+				Subject:   "example.2",
+				Attempts:  1,
+				LockToken: "token-2",
+			},
+		})
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("claimed batch did not start both publishers")
+		}
+	}
+	close(release)
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, first) {
+			t.Fatalf("dispatchBatch() error = %v, want first failure", err)
+		}
+		if !errors.Is(err, second) {
+			t.Fatalf("dispatchBatch() error = %v, want second failure", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("dispatchBatch() did not finish")
+	}
+}
+
