@@ -60,6 +60,9 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := c.validateInitialized(); err != nil {
+		return err
+	}
 
 	requestCtx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
