@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 )
 
@@ -29,7 +30,7 @@ func Enqueue(
 	propagator coreprop.TextMapPropagator,
 ) error {
 	if db == nil {
-		return newOperationError("enqueue outbox event", errNilDBTX)
+		return safeerror.Wrap("enqueue outbox event", errNilDBTX)
 	}
 	if err := event.Validate(); err != nil {
 		return err
@@ -43,10 +44,10 @@ func Enqueue(
 	tracestate := carrier.Get("tracestate")
 
 	if len(traceparent) > maxTraceparentLen {
-		return newOperationError("enqueue outbox event", errTraceparentTooLong)
+		return safeerror.Wrap("enqueue outbox event", errTraceparentTooLong)
 	}
 	if len(tracestate) > maxTracestateLen {
-		return newOperationError("enqueue outbox event", errTracestateTooLong)
+		return safeerror.Wrap("enqueue outbox event", errTracestateTooLong)
 	}
 
 	if _, err := db.Exec(
@@ -58,7 +59,7 @@ func Enqueue(
 		traceparent,
 		tracestate,
 	); err != nil {
-		return newOperationError("enqueue outbox event", err)
+		return safeerror.Wrap("enqueue outbox event", err)
 	}
 	return nil
 }

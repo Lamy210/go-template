@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -90,13 +91,13 @@ func Open(cfg ClientConfig, options ...Option) (*Client, error) {
 		nats.RetryOnFailedConnect(false),
 	)
 	if err != nil {
-		return nil, newOperationError("connect nats", err)
+		return nil, safeerror.Wrap("connect nats", err)
 	}
 
 	js, err := jetstream.New(conn, jetstream.WithDefaultTimeout(cfg.RequestTimeout))
 	if err != nil {
 		conn.Close()
-		return nil, newOperationError("create jetstream client", err)
+		return nil, safeerror.Wrap("create jetstream client", err)
 	}
 
 	client := &Client{
@@ -136,7 +137,7 @@ func (c *Client) Publish(
 
 	ack, err := c.publishMessage(ctx, msg, msgID)
 	if err != nil {
-		return PublishAck{}, newOperationError("publish jetstream message", err)
+		return PublishAck{}, safeerror.Wrap("publish jetstream message", err)
 	}
 
 	return PublishAck{
@@ -194,7 +195,7 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 			return err
 		}
 		if c.conn.Status() != nats.CONNECTED {
-			return newOperationError("nats connection is not ready", errors.New("connection not connected"))
+			return safeerror.Wrap("nats connection is not ready", errors.New("connection not connected"))
 		}
 
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -202,17 +203,17 @@ func (c *Client) ReadinessCheck(streamConfig StreamConfig, timeout time.Duration
 
 		stream, err := c.js.Stream(checkCtx, streamConfig.Name)
 		if err != nil {
-			return newOperationError("query required jetstream stream", err)
+			return safeerror.Wrap("query required jetstream stream", err)
 		}
 		info := stream.CachedInfo()
 		if info == nil {
-			return newOperationError(
+			return safeerror.Wrap(
 				"read required jetstream stream configuration",
 				errors.New("stream information unavailable"),
 			)
 		}
 		if !managedStreamConfigMatches(info.Config, streamConfig) {
-			return newOperationError(
+			return safeerror.Wrap(
 				"required jetstream stream configuration drift",
 				ErrStreamConfigDrift,
 			)
@@ -228,7 +229,7 @@ func (c *Client) Drain(ctx context.Context) error {
 		return nil
 	}
 	if err := c.conn.Drain(); err != nil && !errors.Is(err, nats.ErrConnectionClosed) {
-		return newOperationError("start nats drain", err)
+		return safeerror.Wrap("start nats drain", err)
 	}
 
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -237,14 +238,14 @@ func (c *Client) Drain(ctx context.Context) error {
 	for {
 		if c.conn.IsClosed() {
 			if err := c.conn.LastError(); errors.Is(err, nats.ErrDrainTimeout) {
-				return newOperationError("drain nats connection", err)
+				return safeerror.Wrap("drain nats connection", err)
 			}
 			return nil
 		}
 		select {
 		case <-ctx.Done():
 			c.conn.Close()
-			return newOperationError("wait for nats drain", ctx.Err())
+			return safeerror.Wrap("wait for nats drain", ctx.Err())
 		case <-ticker.C:
 		}
 	}

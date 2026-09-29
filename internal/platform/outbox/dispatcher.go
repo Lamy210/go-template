@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 )
 
@@ -115,7 +116,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			return newOperationError("claim outbox dispatch batch", err)
+			return safeerror.Wrap("claim outbox dispatch batch", err)
 		}
 
 		if len(events) == 0 {
@@ -181,7 +182,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		// A publisher panic is a programming/infrastructure failure, not a
 		// normal broker rejection. Do not mutate durable state: leave the
 		// lease to expire and stop the dispatcher with a sanitized error.
-		return newOperationError("publish outbox event", err)
+		return safeerror.Wrap("publish outbox event", err)
 	}
 
 	settleBase := context.WithoutCancel(ctx)
@@ -190,7 +191,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 
 	if err == nil {
 		if settleErr := d.store.MarkPublished(settleCtx, event); settleErr != nil {
-			return newOperationError("mark outbox event published", settleErr)
+			return safeerror.Wrap("mark outbox event published", settleErr)
 		}
 		return nil
 	}
@@ -199,14 +200,14 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 	// later at-least-once retry rather than permanently failing the event.
 	if ctx.Err() != nil {
 		if retryErr := d.store.Retry(settleCtx, event, d.cfg.RetryBaseDelay); retryErr != nil {
-			return newOperationError("release canceled outbox event", retryErr)
+			return safeerror.Wrap("release canceled outbox event", retryErr)
 		}
 		return nil
 	}
 
 	if event.Attempts >= d.cfg.MaxAttempts {
 		if failErr := d.store.MarkFailed(settleCtx, event); failErr != nil {
-			return newOperationError("mark outbox event failed", failErr)
+			return safeerror.Wrap("mark outbox event failed", failErr)
 		}
 		return nil
 	}
@@ -217,7 +218,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		d.cfg.RetryMaxDelay,
 	)
 	if retryErr := d.store.Retry(settleCtx, event, delay); retryErr != nil {
-		return newOperationError("schedule outbox retry", retryErr)
+		return safeerror.Wrap("schedule outbox retry", retryErr)
 	}
 	return nil
 }

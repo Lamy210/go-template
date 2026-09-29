@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -38,19 +37,6 @@ func TestConfigRejectsRetryBeyondExportDeadline(t *testing.T) {
 	cfg.RetryMaxElapsedTime = cfg.ExportTimeout + time.Second
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want retry deadline error")
-	}
-}
-
-func TestOperationErrorRetainsCauseWithoutExposingIt(t *testing.T) {
-	t.Parallel()
-
-	cause := errors.New("collector response with sensitive diagnostic")
-	err := newOperationError("export telemetry", cause)
-	if !errors.Is(err, cause) {
-		t.Fatal("operation error does not retain cause")
-	}
-	if strings.Contains(err.Error(), cause.Error()) {
-		t.Fatalf("Error() exposed raw exporter error: %q", err.Error())
 	}
 }
 

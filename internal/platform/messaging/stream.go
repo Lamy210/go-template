@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -59,20 +60,20 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 		return verifyManagedStream(stream, cfg)
 	}
 	if !errors.Is(err, jetstream.ErrStreamNotFound) {
-		return newOperationError("query required jetstream stream", err)
+		return safeerror.Wrap("query required jetstream stream", err)
 	}
 
 	stream, err = c.js.CreateStream(requestCtx, managedStreamConfig(cfg))
 	if err != nil {
 		if !errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
-			return newOperationError("create jetstream stream", err)
+			return safeerror.Wrap("create jetstream stream", err)
 		}
 
 		// Another instance may have created the stream between the lookup and
 		// create calls. Re-read it and apply the same managed-field check.
 		stream, err = c.js.Stream(requestCtx, cfg.Name)
 		if err != nil {
-			return newOperationError("query concurrently created jetstream stream", err)
+			return safeerror.Wrap("query concurrently created jetstream stream", err)
 		}
 	}
 	return verifyManagedStream(stream, cfg)
@@ -81,13 +82,13 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 func verifyManagedStream(stream jetstream.Stream, cfg StreamConfig) error {
 	info := stream.CachedInfo()
 	if info == nil {
-		return newOperationError(
+		return safeerror.Wrap(
 			"read required jetstream stream configuration",
 			errors.New("stream information unavailable"),
 		)
 	}
 	if !managedStreamConfigMatches(info.Config, cfg) {
-		return newOperationError(
+		return safeerror.Wrap(
 			"required jetstream stream configuration drift",
 			ErrStreamConfigDrift,
 		)

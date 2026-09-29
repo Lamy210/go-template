@@ -133,23 +133,6 @@ func (c *propagationCarrier) Keys() []string {
 	return keys
 }
 
-// operationError preserves the underlying PostgreSQL cause for errors.Is/
-// errors.As while keeping raw driver diagnostics out of ordinary logs.
-type operationError struct {
-	operation string
-	cause     error
-}
-
-func (e *operationError) Error() string { return e.operation }
-func (e *operationError) Unwrap() error { return e.cause }
-
-func newOperationError(operation string, cause error) error {
-	if cause == nil {
-		return nil
-	}
-	return &operationError{operation: operation, cause: cause}
-}
-
 // Keep the pgx import at the storage boundary compile-checked. Enqueue callers
 // commonly pass pgx.Tx directly.
 var _ DBTX = (pgx.Tx)(nil)

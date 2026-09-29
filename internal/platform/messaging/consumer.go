@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -133,11 +134,11 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		jetstream.PullMaxMessages(cfg.MaxAckPending),
 		jetstream.PullExpiry(cfg.PullExpiry),
 		jetstream.ConsumeErrHandler(func(_ jetstream.ConsumeContext, err error) {
-			reportFatal(newOperationError("consume jetstream messages", err))
+			reportFatal(safeerror.Wrap("consume jetstream messages", err))
 		}),
 	)
 	if err != nil {
-		return newOperationError("start jetstream consumer", err)
+		return safeerror.Wrap("start jetstream consumer", err)
 	}
 
 	select {
@@ -150,7 +151,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 			return nil
 		case <-drainCtx.Done():
 			consumeCtx.Stop()
-			return newOperationError("drain jetstream consumer", drainCtx.Err())
+			return safeerror.Wrap("drain jetstream consumer", drainCtx.Err())
 		}
 	case err := <-fatal:
 		consumeCtx.Stop()
@@ -166,7 +167,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		case <-stopCtx.Done():
 			return errors.Join(
 				err,
-				newOperationError("stop jetstream consumer", stopCtx.Err()),
+				safeerror.Wrap("stop jetstream consumer", stopCtx.Err()),
 			)
 		}
 	}
@@ -184,7 +185,7 @@ func (c *Client) ensureConsumer(
 		return verifyManagedConsumer(consumer, cfg)
 	}
 	if !errors.Is(err, jetstream.ErrConsumerNotFound) {
-		return nil, newOperationError("query durable jetstream consumer", err)
+		return nil, safeerror.Wrap("query durable jetstream consumer", err)
 	}
 
 	consumer, err = c.js.CreateConsumer(
@@ -194,14 +195,14 @@ func (c *Client) ensureConsumer(
 	)
 	if err != nil {
 		if !errors.Is(err, jetstream.ErrConsumerExists) {
-			return nil, newOperationError("create durable jetstream consumer", err)
+			return nil, safeerror.Wrap("create durable jetstream consumer", err)
 		}
 
 		// Another instance may have created the durable between lookup and
 		// create. Re-read it and apply the same managed-field verification.
 		consumer, err = c.js.Consumer(requestCtx, cfg.Stream.Name, cfg.Durable)
 		if err != nil {
-			return nil, newOperationError(
+			return nil, safeerror.Wrap(
 				"query concurrently created jetstream consumer",
 				err,
 			)
@@ -217,13 +218,13 @@ func verifyManagedConsumer(
 ) (jetstream.Consumer, error) {
 	info := consumer.CachedInfo()
 	if info == nil {
-		return nil, newOperationError(
+		return nil, safeerror.Wrap(
 			"read durable jetstream consumer configuration",
 			errors.New("consumer information unavailable"),
 		)
 	}
 	if !managedConsumerConfigMatches(info.Config, cfg) {
-		return nil, newOperationError(
+		return nil, safeerror.Wrap(
 			"durable jetstream consumer configuration drift",
 			ErrConsumerConfigDrift,
 		)
@@ -276,7 +277,7 @@ func (c *Client) handleDelivery(
 ) {
 	metadata, err := msg.Metadata()
 	if err != nil {
-		reportFatal(newOperationError("read jetstream message metadata", err))
+		reportFatal(safeerror.Wrap("read jetstream message metadata", err))
 		return
 	}
 
@@ -326,7 +327,7 @@ func (c *Client) handleDelivery(
 
 	if metadata.NumDelivered < processAttempts {
 		if err := msg.NakWithDelay(cfg.RetryDelay); err != nil {
-			reportFatal(newOperationError("schedule jetstream retry", err))
+			reportFatal(safeerror.Wrap("schedule jetstream retry", err))
 		}
 		return
 	}
@@ -353,11 +354,11 @@ func (c *Client) quarantine(
 	if _, err := c.publishMessage(parent, out, msgID); err != nil {
 		if metadata.NumDelivered < totalAttempts {
 			if nakErr := msg.NakWithDelay(cfg.RetryDelay); nakErr != nil {
-				reportFatal(newOperationError("schedule quarantine retry", nakErr))
+				reportFatal(safeerror.Wrap("schedule quarantine retry", nakErr))
 			}
 			return
 		}
-		reportFatal(newOperationError("publish quarantine message", err))
+		reportFatal(safeerror.Wrap("publish quarantine message", err))
 		return
 	}
 
@@ -394,7 +395,7 @@ func doubleAck(parent context.Context, msg jetstream.Msg, timeout time.Duration)
 	defer cancel()
 
 	if err := msg.DoubleAck(ackCtx); err != nil {
-		return newOperationError("ack jetstream message", err)
+		return safeerror.Wrap("ack jetstream message", err)
 	}
 	return nil
 }

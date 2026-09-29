@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -108,7 +109,7 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
-		return nil, newOperationError("begin outbox claim transaction", err)
+		return nil, safeerror.Wrap("begin outbox claim transaction", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -116,7 +117,7 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 
 	rows, err := tx.Query(ctx, claimSQL, cfg.BatchSize, durationInterval(cfg.Lease), token)
 	if err != nil {
-		return nil, newOperationError("claim outbox events", err)
+		return nil, safeerror.Wrap("claim outbox events", err)
 	}
 	defer rows.Close()
 
@@ -133,15 +134,15 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 			&event.Attempts,
 			&event.LockToken,
 		); err != nil {
-			return nil, newOperationError("scan claimed outbox event", err)
+			return nil, safeerror.Wrap("scan claimed outbox event", err)
 		}
 		claimed = append(claimed, event)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, newOperationError("iterate claimed outbox events", err)
+		return nil, safeerror.Wrap("iterate claimed outbox events", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, newOperationError("commit outbox claim transaction", err)
+		return nil, safeerror.Wrap("commit outbox claim transaction", err)
 	}
 	return claimed, nil
 }
@@ -179,10 +180,10 @@ func (s *Store) transition(ctx context.Context, query string, args ...any) error
 	}
 	tag, err := s.pool.Exec(ctx, query, args...)
 	if err != nil {
-		return newOperationError("settle outbox event", err)
+		return safeerror.Wrap("settle outbox event", err)
 	}
 	if tag.RowsAffected() != 1 {
-		return newOperationError(
+		return safeerror.Wrap(
 			"settle outbox event",
 			errors.New("outbox claim no longer owned"),
 		)

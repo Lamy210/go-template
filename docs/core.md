@@ -42,6 +42,16 @@ HTTP status codes are deliberately not part of `apperror`. The HTTP adapter owns
 
 The wrapped cause participates in the standard `errors.Is` / `errors.As` tree, but `Error()` does not include the cause text. This prevents a dependency error containing credentials, SQL, a DSN, or a token from being accidentally exposed through normal error formatting.
 
+### `internal/core/safeerror`
+
+Defines the shared infrastructure-error safety contract used by platform adapters:
+
+- `Wrap(operation, cause)` keeps the original cause available to `errors.Is` / `errors.As`;
+- ordinary `Error()` output contains only the safe operation name;
+- a nil cause returns nil.
+
+This is intentionally separate from `apperror`. `apperror` carries application semantics that transports may map to public responses; `safeerror` only prevents raw dependency diagnostics from being exposed accidentally while preserving the internal cause chain.
+
 ### `internal/core/propagation`
 
 Defines the transport-neutral text-map propagation contract shared by adapters:
@@ -57,6 +67,8 @@ Business/application code should return either:
 
 - an `*apperror.Error` when callers or transports need semantic handling; or
 - a wrapped Go error with useful internal context when no semantic mapping is required yet.
+
+Platform adapters should use `safeerror.Wrap` when they need to retain a dependency cause whose raw text is unsafe for ordinary logs. Application semantic errors should continue to use `apperror`.
 
 Transport adapters translate application errors into their protocol-specific representation.
 They must fail closed when they encounter a semantic kind they do not explicitly

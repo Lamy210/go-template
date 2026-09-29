@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -110,7 +111,7 @@ func Open(
 		}),
 	)
 	if err != nil {
-		return nil, newOperationError("create OTLP trace exporter", err)
+		return nil, safeerror.Wrap("create OTLP trace exporter", err)
 	}
 
 	metricExporter, err := otlpmetrichttp.New(
@@ -129,7 +130,7 @@ func Open(
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), cfg.ExportTimeout)
 		defer cancel()
 		_ = traceExporter.Shutdown(cleanupCtx)
-		return nil, newOperationError("create OTLP metric exporter", err)
+		return nil, safeerror.Wrap("create OTLP metric exporter", err)
 	}
 
 	res := resource.NewWithAttributes(
@@ -375,7 +376,7 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 func signalEndpoint(base, signal string) (string, error) {
 	endpoint, err := url.Parse(strings.TrimSpace(base))
 	if err != nil {
-		return "", newOperationError("parse OTLP endpoint", err)
+		return "", safeerror.Wrap("parse OTLP endpoint", err)
 	}
 	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
 		return "", fmt.Errorf("OTLP endpoint must use http or https")

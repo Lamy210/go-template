@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -64,7 +65,7 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 
 	poolConfig, err := pgxpool.ParseConfig(cfg.URL)
 	if err != nil {
-		return nil, newOperationError("parse postgres configuration", err)
+		return nil, safeerror.Wrap("parse postgres configuration", err)
 	}
 
 	poolConfig.MaxConns = cfg.MaxConns
@@ -79,11 +80,11 @@ func Open(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
 
 	pool, err := pgxpool.NewWithConfig(connectCtx, poolConfig)
 	if err != nil {
-		return nil, newOperationError("create postgres pool", err)
+		return nil, safeerror.Wrap("create postgres pool", err)
 	}
 	if err := pool.Ping(connectCtx); err != nil {
 		pool.Close()
-		return nil, newOperationError("ping postgres", err)
+		return nil, safeerror.Wrap("ping postgres", err)
 	}
 	return pool, nil
 }
@@ -102,7 +103,7 @@ func ReadinessCheck(pool *pgxpool.Pool, timeout time.Duration) func(context.Cont
 		defer cancel()
 
 		if err := pool.Ping(checkCtx); err != nil {
-			return newOperationError("ping postgres", err)
+			return safeerror.Wrap("ping postgres", err)
 		}
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/Lamy210/go-template/internal/core/safeerror"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -40,6 +41,6 @@ func closeWithContext(ctx context.Context, resource closer) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return newOperationError("close postgres pool", ctx.Err())
+		return safeerror.Wrap("close postgres pool", ctx.Err())
 	}
 }

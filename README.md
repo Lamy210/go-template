@@ -43,7 +43,7 @@ Useful endpoints:
 
 Application code uses transport-neutral errors from `internal/core/apperror`. HTTP adapters map them to a safe response containing a machine-readable `code`, public `message`, optional `details`, and `request_id`.
 
-Raw dependency errors are not returned to clients. Unknown errors collapse to a generic HTTP 500 response. Huma validation/framework errors are normalized into the same response contract.
+Raw dependency errors are not returned to clients. Platform adapters use the shared `internal/core/safeerror` wrapper so ordinary error strings contain only safe operation names while the original cause remains available to `errors.Is` / `errors.As`. Unknown errors collapse to a generic HTTP 500 response. Huma validation/framework errors are normalized into the same response contract.
 
 See [docs/core.md](docs/core.md) for ownership and helper rules.
 
@@ -158,6 +158,7 @@ internal/
   core/                   stable transport-neutral shared contracts
     apperror/              application error semantics
     propagation/           transport-neutral text-map context contract
+    safeerror/             sanitized infrastructure cause wrappers
   modules/
     example/store/sqlc/    removable generated DB example
   platform/
