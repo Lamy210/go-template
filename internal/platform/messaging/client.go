@@ -4,7 +4,6 @@ package messaging
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -151,11 +150,17 @@ func (c *Client) Publish(
 	payload []byte,
 ) (PublishAck, error) {
 	if err := natssubject.ValidateLiteral(subject); err != nil {
-		return PublishAck{}, fmt.Errorf("nats publish subject is invalid: %w", err)
+		return PublishAck{}, newOperationError(
+			"nats publish subject is invalid",
+			errors.Join(ErrInvalidPublishSubject, err),
+		)
 	}
 	if msgID != "" {
 		if err := messageid.Validate(msgID); err != nil {
-			return PublishAck{}, fmt.Errorf("nats message ID is invalid: %w", err)
+			return PublishAck{}, newOperationError(
+				"nats message ID is invalid",
+				errors.Join(ErrInvalidMessageID, err),
+			)
 		}
 	}
 	if err := c.validateInitialized(); err != nil {
