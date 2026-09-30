@@ -20,7 +20,37 @@ type EventStore interface {
 // Publisher sends one durable event to the external broker.
 type Publisher func(context.Context, string, string, []byte) error
 
-var errPublisherPanic = errors.New("outbox publisher panicked")
+var (
+	errPublisherPanic = errors.New("outbox publisher panicked")
+	// ErrPermanentPublishFailure marks a publisher rejection that cannot become
+	// successful by retrying the same durable event unchanged.
+	ErrPermanentPublishFailure = errors.New("outbox publish permanently rejected")
+)
+
+type permanentPublishFailure struct {
+	cause error
+}
+
+func (e *permanentPublishFailure) Error() string {
+	return ErrPermanentPublishFailure.Error()
+}
+
+func (e *permanentPublishFailure) Unwrap() error {
+	return e.cause
+}
+
+func (e *permanentPublishFailure) Is(target error) bool {
+	return target == ErrPermanentPublishFailure
+}
+
+// MarkPermanentPublishFailure lets a composition adapter classify a
+// transport-specific rejection without making the outbox import that transport.
+func MarkPermanentPublishFailure(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return &permanentPublishFailure{cause: cause}
+}
 
 // DispatcherConfig bounds polling, publishing, retry, and settlement behavior.
 type DispatcherConfig struct {
@@ -203,8 +233,19 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return nil
 	}
 
-	// Cancellation makes publish success ambiguous. Release the lease for a
-	// later at-least-once retry rather than permanently failing the event.
+	if errors.Is(err, ErrPermanentPublishFailure) {
+		// The publisher contract guarantees the unchanged event cannot be
+		// accepted. Settle it immediately instead of consuming the full retry
+		// budget. This check precedes cancellation ambiguity because permanent
+		// classification specifically guarantees no successful publish.
+		if failErr := d.store.MarkFailed(settleCtx, event); failErr != nil {
+			return newOperationError("mark permanently rejected outbox event failed", failErr)
+		}
+		return nil
+	}
+
+	// Cancellation makes ordinary publish success ambiguous. Release the lease
+	// for a later at-least-once retry rather than permanently failing the event.
 	if ctx.Err() != nil {
 		if retryErr := d.store.Retry(settleCtx, event, d.cfg.RetryBaseDelay); retryErr != nil {
 			return newOperationError("release canceled outbox event", retryErr)

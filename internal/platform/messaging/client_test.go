@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -58,13 +59,18 @@ func TestPublishRejectsInvalidLiteralSubjectBeforeBrokerUse(t *testing.T) {
 		"events..created",
 		"events created",
 	} {
-		if _, err := client.Publish(
+		_, err := client.Publish(
 			context.Background(),
 			subject,
 			"event-1",
 			[]byte("payload"),
-		); err == nil {
-			t.Fatalf("Publish(%q) error = nil, want invalid subject error", subject)
+		)
+		if !errors.Is(err, ErrInvalidPublishSubject) {
+			t.Fatalf(
+				"Publish(%q) error = %v, want ErrInvalidPublishSubject",
+				subject,
+				err,
+			)
 		}
 	}
 }
@@ -81,13 +87,18 @@ func TestPublishRejectsNormalizedMessageIDBeforeBrokerUse(t *testing.T) {
 		"event\n1",
 		"event\r1",
 	} {
-		if _, err := client.Publish(
+		_, err := client.Publish(
 			context.Background(),
 			"events.created",
 			msgID,
 			[]byte("payload"),
-		); err == nil {
-			t.Fatalf("Publish(msgID=%q) error = nil, want canonical ID error", msgID)
+		)
+		if !errors.Is(err, ErrInvalidMessageID) {
+			t.Fatalf(
+				"Publish(msgID=%q) error = %v, want ErrInvalidMessageID",
+				msgID,
+				err,
+			)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -200,5 +201,108 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("dispatcher did not stop within %s", 2*time.Second)
+	}
+}
+
+func TestOutboxDispatcherPermanentlyRejectedEventFailsWithoutRetry(t *testing.T) {
+	pool, ctx := openTestPool(t)
+	if _, err := pool.Exec(ctx, "DELETE FROM outbox_events"); err != nil {
+		t.Fatalf("clear outbox: %v", err)
+	}
+
+	store, err := outbox.NewStore(pool)
+	if err != nil {
+		t.Fatalf("new outbox store: %v", err)
+	}
+	dispatcher, err := outbox.NewDispatcher(
+		store,
+		func(context.Context, string, string, []byte) error {
+			return outbox.MarkPermanentPublishFailure(
+				errors.New("deterministic transport rejection"),
+			)
+		},
+		nil,
+		outbox.DispatcherConfig{
+			BatchSize:      1,
+			PollInterval:   20 * time.Millisecond,
+			Lease:          2 * time.Second,
+			MaxAttempts:    10,
+			RetryBaseDelay: 50 * time.Millisecond,
+			RetryMaxDelay:  200 * time.Millisecond,
+			PublishTimeout: 500 * time.Millisecond,
+			StoreTimeout:   500 * time.Millisecond,
+		},
+	)
+	if err != nil {
+		t.Fatalf("new outbox dispatcher: %v", err)
+	}
+
+	const eventID = "outbox-permanent-rejection"
+	if err := outbox.Enqueue(
+		ctx,
+		pool,
+		outbox.Event{
+			ID:      eventID,
+			Subject: "outbox.events.invalid",
+			Payload: []byte("payload"),
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("enqueue outbox event: %v", err)
+	}
+
+	dispatchCtx, cancelDispatcher := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- dispatcher.Run(dispatchCtx)
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var (
+			failed    bool
+			published bool
+			attempts  int
+		)
+		err := pool.QueryRow(
+			ctx,
+			`SELECT
+			    failed_at IS NOT NULL,
+			    published_at IS NOT NULL,
+			    attempts
+			 FROM outbox_events
+			 WHERE event_id = $1`,
+			eventID,
+		).Scan(&failed, &published, &attempts)
+		if err != nil {
+			cancelDispatcher()
+			t.Fatalf("read permanent rejection settlement: %v", err)
+		}
+		if failed {
+			if published {
+				cancelDispatcher()
+				t.Fatal("permanently rejected event was also marked published")
+			}
+			if attempts != 1 {
+				cancelDispatcher()
+				t.Fatalf("outbox attempts = %d, want 1", attempts)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			cancelDispatcher()
+			t.Fatal("permanently rejected event was not marked failed")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	cancelDispatcher()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("dispatcher shutdown: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatcher did not stop")
 	}
 }

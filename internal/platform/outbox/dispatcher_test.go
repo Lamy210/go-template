@@ -284,6 +284,92 @@ func TestDispatcherContainsPublisherPanicAsFatalError(t *testing.T) {
 	}
 }
 
+func TestPermanentPublishFailureRetainsCauseWithoutExposingIt(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("sensitive broker rejection")
+	err := MarkPermanentPublishFailure(cause)
+	if !errors.Is(err, ErrPermanentPublishFailure) {
+		t.Fatal("permanent publish failure sentinel is not retained")
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("permanent publish failure cause is not retained")
+	}
+	if got := err.Error(); got != ErrPermanentPublishFailure.Error() {
+		t.Fatalf("Error() = %q, want sanitized permanent failure text", got)
+	}
+}
+
+func TestDispatcherImmediatelyFailsPermanentPublishRejection(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("deterministic rejection")
+	store := &fakeEventStore{}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			return MarkPermanentPublishFailure(cause)
+		},
+		nil,
+	)
+
+	event := ClaimedEvent{
+		ID:        1,
+		EventID:   "event-1",
+		Subject:   "example.created",
+		Attempts:  1,
+		LockToken: "token",
+	}
+	if err := dispatcher.dispatchOne(context.Background(), event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if len(store.failed) != 1 {
+		t.Fatalf("failed settlements = %d, want 1", len(store.failed))
+	}
+	if len(store.retried) != 0 {
+		t.Fatalf("retry settlements = %d, want 0", len(store.retried))
+	}
+	if len(store.published) != 0 {
+		t.Fatalf("published settlements = %d, want 0", len(store.published))
+	}
+}
+
+func TestDispatcherPermanentPublishSettlementFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	settlementErr := errors.New("database unavailable")
+	store := &fakeEventStore{settleErr: settlementErr}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			return MarkPermanentPublishFailure(errors.New("deterministic rejection"))
+		},
+		nil,
+	)
+
+	err := dispatcher.dispatchOne(
+		context.Background(),
+		ClaimedEvent{
+			ID:        1,
+			EventID:   "event-1",
+			Subject:   "example.created",
+			Attempts:  1,
+			LockToken: "token",
+		},
+	)
+	if !errors.Is(err, settlementErr) {
+		t.Fatalf("dispatchOne() error = %v, want settlement failure", err)
+	}
+	if got := err.Error(); got != "mark permanently rejected outbox event failed" {
+		t.Fatalf("dispatchOne() error text = %q", got)
+	}
+}
+
 func TestDispatcherSchedulesCappedRetry(t *testing.T) {
 	t.Parallel()
 

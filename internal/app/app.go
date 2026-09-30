@@ -218,7 +218,7 @@ func Run(ctx context.Context) error {
 			outboxStore,
 			func(publishCtx context.Context, subject, eventID string, payload []byte) error {
 				_, err := natsClient.Publish(publishCtx, subject, eventID, payload)
-				return err
+				return classifyOutboxPublishError(err)
 			},
 			propagator,
 			outbox.DispatcherConfig{
@@ -382,6 +382,18 @@ func Run(ctx context.Context) error {
 
 	logger.Info("shutdown complete")
 	return nil
+}
+
+func classifyOutboxPublishError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, messaging.ErrMessageTooLarge) ||
+		errors.Is(err, messaging.ErrInvalidPublishSubject) ||
+		errors.Is(err, messaging.ErrInvalidMessageID) {
+		return outbox.MarkPermanentPublishFailure(err)
+	}
+	return err
 }
 
 func newLogger(
