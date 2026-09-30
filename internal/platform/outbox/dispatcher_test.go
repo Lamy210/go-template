@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -283,6 +284,71 @@ func TestDispatcherCancelsSiblingPublishAfterFatalSettlementFailure(t *testing.T
 	}
 	if len(store.failed) != 0 {
 		t.Fatalf("canceled sibling failed settlements = %d, want 0", len(store.failed))
+	}
+}
+
+func TestDispatcherContainsStoreClaimPanicAsFatalError(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive store claim panic"
+	store := &fakeEventStore{
+		claimFn: func(context.Context, ClaimConfig) ([]ClaimedEvent, error) {
+			panic(sensitive)
+		},
+	}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error { return nil },
+		nil,
+	)
+
+	err := dispatcher.Run(context.Background())
+	if !errors.Is(err, errEventStorePanic) {
+		t.Fatalf("Run() error = %v, want event store panic sentinel", err)
+	}
+	if got := err.Error(); got != "claim outbox dispatch batch" {
+		t.Fatalf("Run() error text = %q", got)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("Run() exposed store panic value: %q", err.Error())
+	}
+}
+
+func TestDispatcherContainsStoreSettlementPanicAsFatalError(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive store settlement panic"
+	store := &fakeEventStore{
+		markPublishedFn: func(context.Context, ClaimedEvent) error {
+			panic(sensitive)
+		},
+	}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error { return nil },
+		nil,
+	)
+
+	err := dispatcher.dispatchOne(
+		context.Background(),
+		ClaimedEvent{
+			ID:        1,
+			EventID:   "event-1",
+			Subject:   "example.created",
+			Attempts:  1,
+			LockToken: "token",
+		},
+	)
+	if !errors.Is(err, errEventStorePanic) {
+		t.Fatalf("dispatchOne() error = %v, want event store panic sentinel", err)
+	}
+	if got := err.Error(); got != "mark outbox event published" {
+		t.Fatalf("dispatchOne() error text = %q", got)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("dispatchOne() exposed store panic value: %q", err.Error())
 	}
 }
 
