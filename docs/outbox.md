@@ -103,6 +103,11 @@ type Publisher func(
 The application composition root adapts `messaging.Client.Publish` to this
 function only when PostgreSQL, NATS, and the dispatcher profile are all enabled.
 
+`Dispatcher.Run` rejects nil and zero-value dispatchers with an explicit error
+instead of dereferencing missing runtime dependencies. `NewDispatcher` remains
+the supported constructor and validates the store, publisher, and bounded runtime
+configuration before execution.
+
 Each claimed batch is dispatched concurrently. The configured batch size is
 therefore also the upper bound on dispatcher publish concurrency.
 
