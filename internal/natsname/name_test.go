@@ -25,6 +25,7 @@ func TestValidate(t *testing.T) {
 		"app/worker",
 		"app\\worker",
 		"app\tworker",
+		"app\fworker",
 		"app\rworker",
 		"app\nworker",
 	}
