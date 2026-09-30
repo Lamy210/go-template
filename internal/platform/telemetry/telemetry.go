@@ -222,6 +222,14 @@ func (c Config) Validate() error {
 // HTTPMiddleware returns OpenTelemetry net/http server instrumentation using
 // this provider's explicit SDKs and W3C propagation.
 func (p *Provider) HTTPMiddleware(operation string) func(http.Handler) http.Handler {
+	if p == nil ||
+		p.tracerProvider == nil ||
+		p.meterProvider == nil ||
+		p.propagator == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
 	return otelhttp.NewMiddleware(
 		operation,
 		otelhttp.WithTracerProvider(p.tracerProvider),
@@ -253,11 +261,17 @@ func httpSpanMethod(method string) string {
 
 // Inject writes the active cross-process context into a transport-neutral carrier.
 func (p *Provider) Inject(ctx context.Context, carrier coreprop.TextMapCarrier) {
+	if p == nil || p.propagator == nil || carrier == nil {
+		return
+	}
 	p.propagator.Inject(ctx, carrier)
 }
 
 // Extract restores cross-process context from a transport-neutral carrier.
 func (p *Provider) Extract(ctx context.Context, carrier coreprop.TextMapCarrier) context.Context {
+	if p == nil || p.propagator == nil || carrier == nil {
+		return ctx
+	}
 	return p.propagator.Extract(ctx, carrier)
 }
 
@@ -297,6 +311,9 @@ func (p *Provider) startMessagingOperation(
 	destination string,
 	kind trace.SpanKind,
 ) (context.Context, func(error)) {
+	if p == nil || p.tracerProvider == nil {
+		return ctx, func(error) {}
+	}
 	tracer := p.tracerProvider.Tracer(instrumentationName)
 	spanCtx, span := tracer.Start(
 		ctx,
@@ -343,17 +360,21 @@ func (p *Provider) ForceFlush(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	return runLifecycleOperations(
-		ctx,
-		lifecycleOperation{
+
+	operations := make([]lifecycleOperation, 0, 2)
+	if p.tracerProvider != nil {
+		operations = append(operations, lifecycleOperation{
 			name: "flush telemetry traces",
 			run:  p.tracerProvider.ForceFlush,
-		},
-		lifecycleOperation{
+		})
+	}
+	if p.meterProvider != nil {
+		operations = append(operations, lifecycleOperation{
 			name: "flush telemetry metrics",
 			run:  p.meterProvider.ForceFlush,
-		},
-	)
+		})
+	}
+	return runLifecycleOperations(ctx, operations...)
 }
 
 // Shutdown flushes and releases the trace and metric pipelines once. Both
@@ -364,17 +385,20 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	p.shutdownOnce.Do(func() {
-		p.shutdownErr = runLifecycleOperations(
-			ctx,
-			lifecycleOperation{
+		operations := make([]lifecycleOperation, 0, 2)
+		if p.meterProvider != nil {
+			operations = append(operations, lifecycleOperation{
 				name: "shutdown telemetry metrics",
 				run:  p.meterProvider.Shutdown,
-			},
-			lifecycleOperation{
+			})
+		}
+		if p.tracerProvider != nil {
+			operations = append(operations, lifecycleOperation{
 				name: "shutdown telemetry traces",
 				run:  p.tracerProvider.Shutdown,
-			},
-		)
+			})
+		}
+		p.shutdownErr = runLifecycleOperations(ctx, operations...)
 	})
 	return p.shutdownErr
 }

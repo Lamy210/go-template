@@ -173,3 +173,8 @@ The application never logs the configured endpoint or raw exporter errors.
 Malformed endpoint parse failures also keep the underlying parse cause available
 for programmatic inspection without copying the raw configured URL into normal
 error text or startup logs.
+
+`Open` remains the supported constructor. As a defensive adapter boundary, the
+exported provider integration methods are also nil/zero-value safe: incomplete
+optional telemetry becomes a no-op instead of panicking, while lifecycle methods
+still flush or shut down any SDK providers that are present.
