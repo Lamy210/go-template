@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -113,6 +114,39 @@ func (panickingIntegrationTracer) StartProcess(
 	string,
 ) (context.Context, func(error)) {
 	panic("sensitive process tracer panic")
+}
+
+func TestOpenContainsOptionPanic(t *testing.T) {
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		t.Fatal("NATS_URL is required")
+	}
+
+	const sensitive = "sensitive startup option panic"
+	client, err := messaging.Open(messaging.ClientConfig{
+		URL:            natsURL,
+		Name:           "go-template-option-panic",
+		ConnectTimeout: 2 * time.Second,
+		ReconnectWait:  100 * time.Millisecond,
+		MaxReconnects:  5,
+		DrainTimeout:   3 * time.Second,
+		RequestTimeout: 2 * time.Second,
+	}, messaging.Option(func(*messaging.Client) {
+		panic(sensitive)
+	}))
+	if client != nil {
+		client.Close()
+		t.Fatal("Open() client != nil after option panic")
+	}
+	if err == nil {
+		t.Fatal("Open() error = nil after option panic")
+	}
+	if got := err.Error(); got != "configure nats client" {
+		t.Fatalf("Open() error text = %q, want sanitized operation", got)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("Open() exposed panic value: %q", err.Error())
+	}
 }
 
 func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
