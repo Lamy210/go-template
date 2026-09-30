@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,12 @@ import (
 
 type recordingCloser struct {
 	called atomic.Bool
+}
+
+type panickingCloser struct{}
+
+func (*panickingCloser) Close() {
+	panic("sensitive postgres close panic")
 }
 
 func (c *recordingCloser) Close() {
@@ -49,6 +56,21 @@ func TestCloseWithContextCompletesNormally(t *testing.T) {
 	}
 	if !resource.called.Load() {
 		t.Fatal("Close() was not called")
+	}
+}
+
+func TestCloseWithContextContainsCloserPanic(t *testing.T) {
+	t.Parallel()
+
+	err := closeWithContext(context.Background(), &panickingCloser{})
+	if !errors.Is(err, errPostgresClosePanic) {
+		t.Fatalf("closeWithContext() error = %v, want panic sentinel", err)
+	}
+	if got := err.Error(); got != "close postgres pool" {
+		t.Fatalf("closeWithContext() error text = %q, want sanitized operation", got)
+	}
+	if strings.Contains(err.Error(), "sensitive postgres close panic") {
+		t.Fatalf("closeWithContext() exposed panic value: %q", err.Error())
 	}
 }
 
