@@ -156,6 +156,48 @@ func TestTransactionalOutboxLifecycle(t *testing.T) {
 	}
 }
 
+func TestOutboxNilPayloadPersistsAsEmptyBytea(t *testing.T) {
+	pool, ctx := openTestPool(t)
+
+	const eventID = "nil-payload-event"
+	if _, err := pool.Exec(ctx, "DELETE FROM outbox_events WHERE event_id = $1", eventID); err != nil {
+		t.Fatalf("clear nil payload event: %v", err)
+	}
+
+	if err := outbox.Enqueue(
+		ctx,
+		pool,
+		outbox.Event{
+			ID:      eventID,
+			Subject: "example.empty",
+			Payload: nil,
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("enqueue nil payload event: %v", err)
+	}
+
+	var (
+		payloadIsNull bool
+		payloadBytes  int
+	)
+	if err := pool.QueryRow(
+		ctx,
+		`SELECT payload IS NULL, octet_length(payload)
+		 FROM outbox_events
+		 WHERE event_id = $1`,
+		eventID,
+	).Scan(&payloadIsNull, &payloadBytes); err != nil {
+		t.Fatalf("read nil payload event: %v", err)
+	}
+	if payloadIsNull {
+		t.Fatal("payload persisted as NULL")
+	}
+	if payloadBytes != 0 {
+		t.Fatalf("payload bytes = %d, want 0", payloadBytes)
+	}
+}
+
 func TestOutboxExpiredLeaseCannotSettle(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
