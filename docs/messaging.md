@@ -115,6 +115,17 @@ payload bytes alone. Oversized messages fail locally with
 `messaging.ErrMessageTooLarge` while retaining the normal sanitized
 `publish jetstream message` outer error.
 
+Deterministic caller-input rejections expose safe classification sentinels for
+composition code:
+
+- `ErrInvalidPublishSubject`;
+- `ErrInvalidMessageID`;
+- `ErrMessageTooLarge`.
+
+Connection failures, missing stream responses, and other broker/runtime errors
+are deliberately not classified as permanent because retry may succeed after
+infrastructure recovery.
+
 ## Tracing and context propagation
 
 Messaging accepts optional transport-neutral propagation and operation-tracing
