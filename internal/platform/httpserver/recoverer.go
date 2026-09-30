@@ -17,6 +17,11 @@ import (
 func safeRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tracked := w
+			if _, ok := w.(middleware.WrapResponseWriter); !ok {
+				tracked = middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			}
+
 			defer func() {
 				recovered := recover()
 				if recovered == nil {
@@ -26,6 +31,7 @@ func safeRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 					panic(http.ErrAbortHandler)
 				}
 
+				r = ensureRecoveryRequestID(tracked, r)
 				logger.ErrorContext(
 					r.Context(),
 					"http handler panic",
@@ -33,15 +39,15 @@ func safeRecoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 					"method", httpmethod.LowCardinality(r.Method),
 				)
 
-				if responseStarted(w) ||
+				if responseStarted(tracked) ||
 					strings.EqualFold(r.Header.Get("Connection"), "Upgrade") {
 					panic(http.ErrAbortHandler)
 				}
 
-				writeInternalErrorResponse(w, r)
+				writeInternalErrorResponse(tracked, r)
 			}()
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(tracked, r)
 		})
 	}
 }
