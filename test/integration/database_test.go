@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,36 @@ func TestTransactionRollbackPreservesCause(t *testing.T) {
 	})
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("transaction error = %v, want wrapped sentinel", err)
+	}
+
+	_, err = queries.GetExampleItem(ctx, createdID)
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("GetExampleItem() error = %v, want pgx.ErrNoRows", err)
+	}
+}
+
+func TestTransactionCallbackPanicRollsBack(t *testing.T) {
+	pool, ctx := openTestPool(t)
+	queries := exampledb.New(pool)
+
+	const sensitive = "sensitive transaction panic"
+	var createdID int64
+	err := database.InTx(ctx, pool, func(tx pgx.Tx) error {
+		created, err := queries.WithTx(tx).CreateExampleItem(ctx, "panic-rolled-back")
+		if err != nil {
+			return err
+		}
+		createdID = created.ID
+		panic(sensitive)
+	})
+	if err == nil {
+		t.Fatal("database.InTx() error = nil after callback panic")
+	}
+	if got := err.Error(); got != "postgres transaction" {
+		t.Fatalf("database.InTx() error = %q, want sanitized operation", got)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("database.InTx() exposed panic value: %q", err.Error())
 	}
 
 	_, err = queries.GetExampleItem(ctx, createdID)
