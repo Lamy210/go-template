@@ -3,9 +3,25 @@ package messaging
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestApplyOptionSafelyContainsOptionPanic(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive option panic"
+	err := applyOptionSafely(&Client{}, func(*Client) {
+		panic(sensitive)
+	})
+	if !errors.Is(err, errClientOptionPanic) {
+		t.Fatalf("applyOptionSafely() error = %v, want option panic sentinel", err)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("applyOptionSafely() exposed panic value: %q", err.Error())
+	}
+}
 
 func TestPublicClientMethodsRejectUninitializedClient(t *testing.T) {
 	t.Parallel()
