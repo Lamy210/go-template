@@ -140,9 +140,12 @@ The application composition root owns the OpenTelemetry provider lifecycle. The 
 
 The HTTP adapter exposes optional integration points through constructor options:
 context-derived access-log attributes, matched-route observation, and outer
-middleware. Route observation reports only chi route templates after routing;
-the telemetry adapter converts them into low-cardinality HTTP span names and
-`http.route` attributes without making the HTTP package import OpenTelemetry.
+middleware. Outer middleware factories are executed behind a startup panic
+boundary: a factory panic is reduced to a sanitized adapter error instead of
+terminating the process. Route observation reports only chi route templates
+after routing; the telemetry adapter converts them into low-cardinality HTTP
+span names and `http.route` attributes without making the HTTP package import
+OpenTelemetry.
 
 Access logging follows the same low-cardinality boundary: matched requests log
 the chi route template, while unmatched requests log a fixed `<unmatched>`

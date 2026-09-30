@@ -23,6 +23,8 @@ const (
 	maxContextLogAttrs      = 16
 )
 
+var errOuterMiddlewarePanic = errors.New("http outer middleware panicked")
+
 // ContextLogAttrs extracts optional structured access-log fields from a request context.
 type ContextLogAttrs func(context.Context) []slog.Attr
 
@@ -114,10 +116,11 @@ func New(
 
 	var handler http.Handler = router
 	for i := len(options.outerMiddleware) - 1; i >= 0; i-- {
-		handler = options.outerMiddleware[i](handler)
-		if handler == nil {
-			return nil, errors.New("http outer middleware must not return nil handler")
+		wrapped, err := applyOuterMiddlewareSafely(options.outerMiddleware[i], handler)
+		if err != nil {
+			return nil, err
 		}
+		handler = wrapped
 	}
 
 	return &Server{
@@ -132,6 +135,27 @@ func New(
 			MaxHeaderBytes:    cfg.MaxHeaderBytes,
 		},
 	}, nil
+}
+
+func applyOuterMiddlewareSafely(
+	middleware func(http.Handler) http.Handler,
+	next http.Handler,
+) (handler http.Handler, err error) {
+	if middleware == nil {
+		return next, nil
+	}
+	defer func() {
+		if recover() != nil {
+			handler = nil
+			err = errOuterMiddlewarePanic
+		}
+	}()
+
+	handler = middleware(next)
+	if handler == nil {
+		return nil, errors.New("http outer middleware must not return nil handler")
+	}
+	return handler, nil
 }
 
 func requestID(next http.Handler) http.Handler {
