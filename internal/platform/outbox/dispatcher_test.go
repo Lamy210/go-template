@@ -651,6 +651,23 @@ func TestRetryDelayForEventIsDeterministicAndBounded(t *testing.T) {
 	}
 }
 
+func TestRetryDelayForEventRespectsMaximumAtLargestAllowedWindow(t *testing.T) {
+	t.Parallel()
+
+	got := retryDelayForEvent(
+		"event-long-backoff",
+		100,
+		time.Second,
+		24*time.Hour,
+	)
+	if got < 18*time.Hour || got > 24*time.Hour {
+		t.Fatalf("retry delay = %v, want 18h..24h", got)
+	}
+	if got%time.Microsecond != 0 {
+		t.Fatalf("retry delay = %v, want microsecond precision", got)
+	}
+}
+
 func TestRetryDelayForEventKeepsFirstAttemptAtBase(t *testing.T) {
 	t.Parallel()
 
