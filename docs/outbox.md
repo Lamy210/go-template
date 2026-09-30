@@ -37,7 +37,8 @@ Each event stores:
 
 - stable application-supplied `event_id`;
 - subject;
-- payload up to 1 MiB;
+- payload up to 1 MiB; a nil Go byte slice is normalized to an explicit
+  zero-byte payload rather than SQL NULL;
 - `traceparent` and `tracestate`;
 - attempt count;
 - availability time;
