@@ -148,9 +148,23 @@ succeeds.
 
 For a normal publish failure:
 
-1. if the attempt limit is not reached, the lease is released with exponential
-   retry delay capped by `OUTBOX_DISPATCH_RETRY_MAX_DELAY`;
-2. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
+1. if the attempt limit is not reached, the lease is released with an
+   exponentially increasing retry envelope capped by
+   `OUTBOX_DISPATCH_RETRY_MAX_DELAY`;
+2. the first retry uses `OUTBOX_DISPATCH_RETRY_BASE_DELAY` exactly; later
+   retries use deterministic per-event jitter in the final 25% of the current
+   envelope (75-100% of the envelope);
+3. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
+
+The jitter key is the stable `event_id` plus attempt number. It requires no
+process-global RNG, is reproducible across restarts, and spreads different
+events that failed together instead of scheduling the entire batch for the same
+`available_at`. Jitter is quantized to PostgreSQL's microsecond interval
+precision and never exceeds the configured retry maximum.
+
+Shutdown cancellation is intentionally different: an ambiguous canceled publish
+is released with the exact base delay so shutdown recovery stays prompt and
+predictable.
 
 If application shutdown cancels an in-flight publish, the dispatcher schedules a
 retry even when the attempt count is already at the configured limit. Shutdown
@@ -304,5 +318,5 @@ The combined PostgreSQL + real JetStream integration verifies:
 
 Unit tests additionally verify bounded claim contexts, strict claim/publish/
 settlement lease budgeting, concurrent batch dispatch, sibling cancellation
-after fatal settlement failure, exponential retry capping, cancellation retry,
-and sanitized settlement failures.
+after fatal settlement failure, exponential retry capping, deterministic
+per-event retry jitter, cancellation retry, and sanitized settlement failures.
