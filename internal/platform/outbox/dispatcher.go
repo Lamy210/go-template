@@ -23,7 +23,7 @@ type EventStore interface {
 type Publisher func(context.Context, string, string, []byte) error
 
 var (
-	errPublisherPanic = errors.New("outbox publisher panicked")
+	errPublisherPanic  = errors.New("outbox publisher panicked")
 	errEventStorePanic = errors.New("outbox event store panicked")
 	// ErrPermanentPublishFailure marks a publisher rejection that cannot become
 	// successful by retrying the same durable event unchanged.
