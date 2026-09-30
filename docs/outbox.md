@@ -215,14 +215,18 @@ retry budget. The wrapper preserves the underlying cause for
 `errors.Is/errors.As`, but its normal `Error()` text is the sanitized
 `outbox publish permanently rejected` sentinel.
 
-The NATS composition classifies only deterministic input/capacity failures as
+The NATS composition classifies only deterministic unchanged-input failures as
 permanent:
 
 - invalid literal publish subject;
 - invalid canonical message ID;
-- final header + payload larger than the known publish limit.
+- final header + payload larger than the verified application-managed JetStream
+  `MaxMsgSize`.
 
-Transient connection/broker failures remain on the normal finite retry path.
+A message that exceeds only the currently advertised NATS server `max_payload`
+is **not** permanent. That is an operational broker limit that can change, so it
+remains on the normal finite retry path together with connection and other
+broker/runtime failures.
 
 ## Application lifecycle
 
