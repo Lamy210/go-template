@@ -92,6 +92,17 @@ func (dispatchPropagator) Extract(
 	return context.WithValue(ctx, dispatchContextKey{}, carrier.Get("traceparent"))
 }
 
+func TestDispatcherRunRejectsUninitializedDispatcher(t *testing.T) {
+	t.Parallel()
+
+	dispatchers := []*Dispatcher{nil, {}}
+	for _, dispatcher := range dispatchers {
+		if err := dispatcher.Run(context.Background()); err == nil {
+			t.Fatal("Run() error = nil, want uninitialized dispatcher error")
+		}
+	}
+}
+
 func TestDispatcherMarksSuccessfulPublish(t *testing.T) {
 	t.Parallel()
 
