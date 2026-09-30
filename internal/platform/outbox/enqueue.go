@@ -46,12 +46,20 @@ func Enqueue(
 		return newOperationError("enqueue outbox event", errTracestateTooLong)
 	}
 
+	payload := event.Payload
+	if payload == nil {
+		// pgx encodes a nil []byte as SQL NULL. The durable outbox contract
+		// allows a zero-byte payload while the schema requires BYTEA NOT NULL,
+		// so normalize nil to an explicit empty byte slice at the DB boundary.
+		payload = []byte{}
+	}
+
 	if _, err := db.Exec(
 		ctx,
 		enqueueSQL,
 		event.ID,
 		event.Subject,
-		event.Payload,
+		payload,
 		traceparent,
 		tracestate,
 	); err != nil {

@@ -100,6 +100,34 @@ func TestEnqueueContainsPropagationPanicAndDropsPartialMetadata(t *testing.T) {
 	}
 }
 
+func TestEnqueueNormalizesNilPayloadToEmptyBytes(t *testing.T) {
+	t.Parallel()
+
+	db := &enqueueDBTX{}
+	if err := Enqueue(
+		context.Background(),
+		db,
+		Event{ID: "event-empty", Subject: "example.empty", Payload: nil},
+		nil,
+	); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	if len(db.args) != 5 {
+		t.Fatalf("Exec args = %d, want 5", len(db.args))
+	}
+
+	payload, ok := db.args[2].([]byte)
+	if !ok {
+		t.Fatalf("payload arg type = %T, want []byte", db.args[2])
+	}
+	if payload == nil {
+		t.Fatal("payload arg is nil, want explicit empty []byte")
+	}
+	if len(payload) != 0 {
+		t.Fatalf("payload len = %d, want 0", len(payload))
+	}
+}
+
 func TestEnqueueSanitizesDatabaseErrors(t *testing.T) {
 	t.Parallel()
 
