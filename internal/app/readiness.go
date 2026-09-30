@@ -12,8 +12,9 @@ import (
 //
 // Checks run concurrently so readiness latency is bounded by the slowest
 // successful dependency rather than the sum of all dependency latencies. The
-// first failure cancels siblings and returns immediately. A broken check that
-// panics is converted to a generic failure instead of crashing the process.
+// first failure cancels siblings and returns immediately. Checks must honor
+// context cancellation so fail-fast probes do not leave stuck work behind. A
+// check panic is converted to a generic failure instead of crashing the process.
 func combineReadiness(checks ...httpserver.ReadinessCheck) httpserver.ReadinessCheck {
 	active := make([]httpserver.ReadinessCheck, 0, len(checks))
 	for _, check := range checks {
