@@ -3,6 +3,8 @@ package outbox
 import (
 	"context"
 	"errors"
+	"hash/fnv"
+	"strconv"
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
@@ -260,7 +262,8 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return nil
 	}
 
-	delay := retryDelay(
+	delay := retryDelayForEvent(
+		event.EventID,
 		event.Attempts,
 		d.cfg.RetryBaseDelay,
 		d.cfg.RetryMaxDelay,
@@ -322,6 +325,46 @@ func retryDelay(attempt int, base, maximum time.Duration) time.Duration {
 		return maximum
 	}
 	return delay
+}
+
+func retryDelayForEvent(
+	eventID string,
+	attempt int,
+	base time.Duration,
+	maximum time.Duration,
+) time.Duration {
+	envelope := retryDelay(attempt, base, maximum)
+	if attempt <= 1 || eventID == "" {
+		return envelope
+	}
+
+	envelopeMicros := envelope / time.Microsecond
+	if envelopeMicros <= 1 {
+		return envelope
+	}
+
+	// Equal-ish deterministic jitter in the final 25% of the exponential
+	// envelope. Keeping the upper bound at the existing envelope preserves the
+	// configured maximum while spreading events even after exponential backoff
+	// reaches its cap.
+	windowMicros := envelopeMicros / 4
+	if windowMicros == 0 {
+		return envelope
+	}
+	lowerMicros := envelopeMicros - windowMicros
+	const maxHash = float64(1<<32 - 1)
+	fraction := float64(retryJitterHash(eventID, attempt)) / maxHash
+	offsetMicros := time.Duration(float64(windowMicros) * fraction)
+
+	return (lowerMicros + offsetMicros) * time.Microsecond
+}
+
+func retryJitterHash(eventID string, attempt int) uint32 {
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(eventID))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(strconv.Itoa(attempt)))
+	return hasher.Sum32()
 }
 
 func waitForPoll(ctx context.Context, interval time.Duration) error {
