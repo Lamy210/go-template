@@ -338,6 +338,38 @@ func TestDispatcherImmediatelyFailsPermanentPublishRejection(t *testing.T) {
 	}
 }
 
+func TestDispatcherPermanentPublishSettlementFailureIsFatal(t *testing.T) {
+	t.Parallel()
+
+	settlementErr := errors.New("database unavailable")
+	store := &fakeEventStore{settleErr: settlementErr}
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			return MarkPermanentPublishFailure(errors.New("deterministic rejection"))
+		},
+		nil,
+	)
+
+	err := dispatcher.dispatchOne(
+		context.Background(),
+		ClaimedEvent{
+			ID:        1,
+			EventID:   "event-1",
+			Subject:   "example.created",
+			Attempts:  1,
+			LockToken: "token",
+		},
+	)
+	if !errors.Is(err, settlementErr) {
+		t.Fatalf("dispatchOne() error = %v, want settlement failure", err)
+	}
+	if got := err.Error(); got != "mark permanently rejected outbox event failed" {
+		t.Fatalf("dispatchOne() error text = %q", got)
+	}
+}
+
 func TestDispatcherSchedulesCappedRetry(t *testing.T) {
 	t.Parallel()
 
