@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -380,15 +381,29 @@ func TestDispatcherSchedulesCappedRetry(t *testing.T) {
 	dispatcher.cfg.RetryBaseDelay = time.Second
 	dispatcher.cfg.RetryMaxDelay = 3 * time.Second
 
-	event := ClaimedEvent{ID: 1, Attempts: 3, LockToken: "token"}
+	event := ClaimedEvent{
+		ID:        1,
+		EventID:   "event-1",
+		Attempts:  3,
+		LockToken: "token",
+	}
 	if err := dispatcher.dispatchOne(context.Background(), event); err != nil {
 		t.Fatalf("dispatchOne() error = %v", err)
 	}
 	if len(store.retried) != 1 {
 		t.Fatalf("retry settlements = %d, want 1", len(store.retried))
 	}
-	if got := store.retried[0].delay; got != 3*time.Second {
-		t.Fatalf("retry delay = %v, want 3s", got)
+	want := retryDelayForEvent(
+		event.EventID,
+		event.Attempts,
+		dispatcher.cfg.RetryBaseDelay,
+		dispatcher.cfg.RetryMaxDelay,
+	)
+	if got := store.retried[0].delay; got != want {
+		t.Fatalf("retry delay = %v, want %v", got, want)
+	}
+	if want < 2250*time.Millisecond || want > 3*time.Second {
+		t.Fatalf("jittered capped retry delay = %v, want 2.25s..3s", want)
 	}
 }
 
@@ -613,6 +628,48 @@ func TestRetryDelayIsExponentiallyCapped(t *testing.T) {
 		if got := retryDelay(tt.attempt, time.Second, 5*time.Second); got != tt.want {
 			t.Fatalf("retryDelay(%d) = %v, want %v", tt.attempt, got, tt.want)
 		}
+	}
+}
+
+func TestRetryDelayForEventIsDeterministicAndBounded(t *testing.T) {
+	t.Parallel()
+
+	const (
+		eventID = "event-123"
+		attempt = 4
+	)
+	first := retryDelayForEvent(eventID, attempt, time.Second, 5*time.Second)
+	second := retryDelayForEvent(eventID, attempt, time.Second, 5*time.Second)
+	if first != second {
+		t.Fatalf("retry delay changed for same event/attempt: first=%v second=%v", first, second)
+	}
+	if first < 3750*time.Millisecond || first > 5*time.Second {
+		t.Fatalf("retry delay = %v, want 3.75s..5s", first)
+	}
+	if first%time.Microsecond != 0 {
+		t.Fatalf("retry delay = %v, want microsecond precision", first)
+	}
+}
+
+func TestRetryDelayForEventKeepsFirstAttemptAtBase(t *testing.T) {
+	t.Parallel()
+
+	got := retryDelayForEvent("event-1", 1, time.Second, time.Minute)
+	if got != time.Second {
+		t.Fatalf("first retry delay = %v, want 1s", got)
+	}
+}
+
+func TestRetryDelayForEventSpreadsDifferentEvents(t *testing.T) {
+	t.Parallel()
+
+	delays := make(map[time.Duration]struct{})
+	for i := 0; i < 32; i++ {
+		eventID := fmt.Sprintf("event-%d", i)
+		delays[retryDelayForEvent(eventID, 6, time.Second, time.Minute)] = struct{}{}
+	}
+	if len(delays) < 2 {
+		t.Fatalf("jitter produced only %d distinct delay(s), want multiple", len(delays))
 	}
 }
 
