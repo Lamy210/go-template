@@ -77,7 +77,7 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 
 - Core/HTTP: environment config, logging, error semantics, lifecycle, and an adapter-owned Huma/chi transport config.
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
-- Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, publishing, durable consumer mechanics, and messaging integration tests.
+- Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, header-aware publish-size enforcement, publishing, durable consumer mechanics, and messaging integration tests.
 - Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.
 - Outbox: `internal/platform/outbox`, caller-owned transactional enqueue, PostgreSQL lease/settlement primitives, and a bounded transport-neutral dispatcher. It does not import NATS.
 
