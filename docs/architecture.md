@@ -79,7 +79,7 @@ The repository keeps optional capabilities at explicit infrastructure boundaries
 - PostgreSQL: `internal/platform/database`, sqlc inputs/generated example store, migrations, and integration tests.
 - Messaging: `internal/platform/messaging`, bounded NATS/JetStream connectivity, stream policy, header-aware publish-size enforcement, publishing, durable consumer mechanics, and messaging integration tests.
 - Telemetry: `internal/platform/telemetry`, OTLP exporters, SDK lifecycle, propagation, HTTP instrumentation, and bounded telemetry buffering/export policy.
-- Outbox: `internal/platform/outbox`, caller-owned transactional enqueue, PostgreSQL lease/settlement primitives, and a bounded transport-neutral dispatcher. It does not import NATS.
+- Outbox: `internal/platform/outbox`, caller-owned transactional enqueue, PostgreSQL lease/settlement primitives, a bounded transport-neutral dispatcher, and a transport-neutral permanent-publish classification contract. It does not import NATS.
 
 A profile must be removable without forcing unrelated application code to understand it. PostgreSQL, NATS, and telemetry therefore default to disabled. The example sqlc package is not imported by the running application, and messaging handlers remain feature-owned rather than being embedded in the platform package.
 
