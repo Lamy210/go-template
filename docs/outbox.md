@@ -203,6 +203,27 @@ verified stream limits before attempting a publish. Deployments using the
 dispatcher must size their NATS limits with transport-header headroom above the
 largest outbox payload they intend to enqueue.
 
+## Permanent publisher rejections
+
+The outbox package remains transport-neutral. A composition adapter may wrap a
+publisher error with `outbox.MarkPermanentPublishFailure` only when it can
+guarantee that retrying the unchanged durable event cannot succeed.
+
+Permanent publish failures are settled immediately with `failed_at`, regardless
+of the current attempt count. They do not consume the remaining exponential
+retry budget. The wrapper preserves the underlying cause for
+`errors.Is/errors.As`, but its normal `Error()` text is the sanitized
+`outbox publish permanently rejected` sentinel.
+
+The NATS composition classifies only deterministic input/capacity failures as
+permanent:
+
+- invalid literal publish subject;
+- invalid canonical message ID;
+- final header + payload larger than the known publish limit.
+
+Transient connection/broker failures remain on the normal finite retry path.
+
 ## Application lifecycle
 
 The dispatcher is started only when:
