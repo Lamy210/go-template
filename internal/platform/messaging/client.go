@@ -196,8 +196,15 @@ func (c *Client) publishMessage(
 		msg.Header.Set(jetstream.MsgIDHeader, msgID)
 	}
 
-	limit := c.publishLimits.forSubject(msg.Subject, c.conn.MaxPayload())
-	if !messageFitsPublishLimit(msg, limit) {
+	managedLimit := c.publishLimits.managedForSubject(msg.Subject)
+	if !messageFitsPublishLimit(msg, managedLimit) {
+		err := errors.Join(ErrMessageTooLarge, ErrManagedStreamMessageTooLarge)
+		endOperation(err)
+		return nil, err
+	}
+
+	brokerLimit := positiveLimit(c.conn.MaxPayload())
+	if !messageFitsPublishLimit(msg, brokerLimit) {
 		endOperation(ErrMessageTooLarge)
 		return nil, ErrMessageTooLarge
 	}
