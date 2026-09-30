@@ -388,8 +388,7 @@ func classifyOutboxPublishError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, messaging.ErrManagedStreamMessageTooLarge) ||
-		errors.Is(err, messaging.ErrInvalidPublishSubject) ||
+	if errors.Is(err, messaging.ErrInvalidPublishSubject) ||
 		errors.Is(err, messaging.ErrInvalidMessageID) {
 		return outbox.MarkPermanentPublishFailure(err)
 	}

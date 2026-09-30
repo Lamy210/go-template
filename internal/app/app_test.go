@@ -58,10 +58,6 @@ func TestClassifyOutboxPublishErrorMarksOnlyDeterministicRejections(t *testing.T
 	t.Parallel()
 
 	for _, cause := range []error{
-		errors.Join(
-			messaging.ErrMessageTooLarge,
-			messaging.ErrManagedStreamMessageTooLarge,
-		),
 		messaging.ErrInvalidPublishSubject,
 		messaging.ErrInvalidMessageID,
 	} {
