@@ -187,6 +187,12 @@ failure. The panic value is discarded, no published/retry/failed settlement is
 written, and the current lease is allowed to expire so a later healthy
 dispatcher can retry the event with the same stable event ID.
 
+The injected `EventStore` boundary follows the same process-safety rule. A
+panic from claim or settlement code is converted to a sanitized fatal dispatcher
+error instead of escaping a background goroutine. The dispatcher does not guess
+whether a panicking store mutated durable state; it stops and leaves existing
+lease/transaction recovery semantics to the store implementation.
+
 ## Settlement
 
 Settlement requires both row ID and current lease token.

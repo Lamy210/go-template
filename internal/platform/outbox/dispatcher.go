@@ -23,7 +23,8 @@ type EventStore interface {
 type Publisher func(context.Context, string, string, []byte) error
 
 var (
-	errPublisherPanic = errors.New("outbox publisher panicked")
+	errPublisherPanic  = errors.New("outbox publisher panicked")
+	errEventStorePanic = errors.New("outbox event store panicked")
 	// ErrPermanentPublishFailure marks a publisher rejection that cannot become
 	// successful by retrying the same durable event unchanged.
 	ErrPermanentPublishFailure = errors.New("outbox publish permanently rejected")
@@ -144,7 +145,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		}
 
 		claimCtx, cancelClaim := context.WithTimeout(ctx, d.cfg.StoreTimeout)
-		events, err := d.store.Claim(claimCtx, ClaimConfig{
+		events, err := invokeStoreClaim(d.store, claimCtx, ClaimConfig{
 			BatchSize: d.cfg.BatchSize,
 			Lease:     d.cfg.Lease,
 		})
@@ -229,7 +230,9 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 	defer cancelSettle()
 
 	if err == nil {
-		if settleErr := d.store.MarkPublished(settleCtx, event); settleErr != nil {
+		if settleErr := invokeStoreOperation(func() error {
+			return d.store.MarkPublished(settleCtx, event)
+		}); settleErr != nil {
 			return newOperationError("mark outbox event published", settleErr)
 		}
 		return nil
@@ -240,7 +243,9 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		// accepted. Settle it immediately instead of consuming the full retry
 		// budget. This check precedes cancellation ambiguity because permanent
 		// classification specifically guarantees no successful publish.
-		if failErr := d.store.MarkFailed(settleCtx, event); failErr != nil {
+		if failErr := invokeStoreOperation(func() error {
+			return d.store.MarkFailed(settleCtx, event)
+		}); failErr != nil {
 			return newOperationError("mark permanently rejected outbox event failed", failErr)
 		}
 		return nil
@@ -249,14 +254,18 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 	// Cancellation makes ordinary publish success ambiguous. Release the lease
 	// for a later at-least-once retry rather than permanently failing the event.
 	if ctx.Err() != nil {
-		if retryErr := d.store.Retry(settleCtx, event, d.cfg.RetryBaseDelay); retryErr != nil {
+		if retryErr := invokeStoreOperation(func() error {
+			return d.store.Retry(settleCtx, event, d.cfg.RetryBaseDelay)
+		}); retryErr != nil {
 			return newOperationError("release canceled outbox event", retryErr)
 		}
 		return nil
 	}
 
 	if event.Attempts >= d.cfg.MaxAttempts {
-		if failErr := d.store.MarkFailed(settleCtx, event); failErr != nil {
+		if failErr := invokeStoreOperation(func() error {
+			return d.store.MarkFailed(settleCtx, event)
+		}); failErr != nil {
 			return newOperationError("mark outbox event failed", failErr)
 		}
 		return nil
@@ -268,7 +277,9 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		d.cfg.RetryBaseDelay,
 		d.cfg.RetryMaxDelay,
 	)
-	if retryErr := d.store.Retry(settleCtx, event, delay); retryErr != nil {
+	if retryErr := invokeStoreOperation(func() error {
+		return d.store.Retry(settleCtx, event, delay)
+	}); retryErr != nil {
 		return newOperationError("schedule outbox retry", retryErr)
 	}
 	return nil
@@ -287,6 +298,29 @@ func invokePublisher(
 		}
 	}()
 	return publisher(ctx, subject, eventID, payload)
+}
+
+func invokeStoreClaim(
+	store EventStore,
+	ctx context.Context,
+	cfg ClaimConfig,
+) (events []ClaimedEvent, err error) {
+	defer func() {
+		if recover() != nil {
+			events = nil
+			err = errEventStorePanic
+		}
+	}()
+	return store.Claim(ctx, cfg)
+}
+
+func invokeStoreOperation(operation func() error) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errEventStorePanic
+		}
+	}()
+	return operation()
 }
 
 func (d *Dispatcher) restoreContext(
