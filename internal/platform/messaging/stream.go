@@ -69,7 +69,11 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 
 	stream, err := c.js.Stream(requestCtx, cfg.Name)
 	if err == nil {
-		return verifyManagedStream(stream, cfg)
+		if err := verifyManagedStream(stream, cfg); err != nil {
+			return err
+		}
+		c.publishLimits.remember(cfg.Name, cfg.Subjects, cfg.MaxMessageSize)
+		return nil
 	}
 	if !errors.Is(err, jetstream.ErrStreamNotFound) {
 		return newOperationError("query required jetstream stream", err)
@@ -88,7 +92,11 @@ func (c *Client) EnsureStream(ctx context.Context, cfg StreamConfig) error {
 			return newOperationError("query concurrently created jetstream stream", err)
 		}
 	}
-	return verifyManagedStream(stream, cfg)
+	if err := verifyManagedStream(stream, cfg); err != nil {
+		return err
+	}
+	c.publishLimits.remember(cfg.Name, cfg.Subjects, cfg.MaxMessageSize)
+	return nil
 }
 
 func verifyManagedStream(stream jetstream.Stream, cfg StreamConfig) error {

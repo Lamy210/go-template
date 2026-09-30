@@ -161,6 +161,41 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		t.Fatalf("ensure stream: %v", err)
 	}
 
+	t.Run("preflights managed stream message size including headers", func(t *testing.T) {
+		smallStream := messaging.StreamConfig{
+			Name:            "TEMPLATE_SMALL_MESSAGES",
+			Subjects:        []string{"template.small.>"},
+			MaxConsumers:    2,
+			MaxMessages:     100,
+			MaxBytes:        1 << 20,
+			MaxAge:          time.Hour,
+			MaxMessageSize:  256,
+			DuplicateWindow: time.Minute,
+		}
+		if err := client.EnsureStream(ctx, smallStream); err != nil {
+			t.Fatalf("ensure small-message stream: %v", err)
+		}
+
+		_, err := client.Publish(
+			ctx,
+			"template.small.work",
+			"size-preflight-message-id",
+			make([]byte, 220),
+		)
+		if !errors.Is(err, messaging.ErrMessageTooLarge) {
+			t.Fatalf("oversized publish error = %v, want messaging.ErrMessageTooLarge", err)
+		}
+
+		if _, err := client.Publish(
+			ctx,
+			"template.small.work",
+			"size-preflight-small",
+			[]byte("ok"),
+		); err != nil {
+			t.Fatalf("small publish after preflight rejection: %v", err)
+		}
+	})
+
 	first, err := client.Publish(ctx, "template.events.work", "dedup-1", []byte("deduplicated"))
 	if err != nil {
 		t.Fatalf("first publish: %v", err)

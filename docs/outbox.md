@@ -195,6 +195,14 @@ idempotent.
 JetStream duplicate windows reduce duplicate delivery but do not turn this into
 exactly-once semantics.
 
+The 1 MiB outbox payload bound is a durable-storage limit, not a promise that
+every configured broker/stream can transport a 1 MiB payload. NATS applies its
+message limits to headers plus payload. The messaging adapter therefore
+preflights the final encoded-header upper bound against the connected broker and
+verified stream limits before attempting a publish. Deployments using the
+dispatcher must size their NATS limits with transport-header headroom above the
+largest outbox payload they intend to enqueue.
+
 ## Application lifecycle
 
 The dispatcher is started only when:
