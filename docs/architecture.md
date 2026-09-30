@@ -50,6 +50,13 @@ generic `internal_error` contract when a response has not started, logs only
 sanitized request metadata, and aborts already-started responses rather than
 appending a misleading error payload.
 
+Readiness dependency aggregation is composition-owned. Enabled checks run
+concurrently; the first failure cancels sibling checks and returns immediately,
+and a check panic is collapsed to a generic readiness failure instead of escaping
+its goroutine and terminating the process. Readiness checks are required to honor
+context cancellation; Go cannot forcibly terminate an arbitrary stuck goroutine,
+so cancellation compliance is part of the adapter contract.
+
 Request correlation is also treated as an HTTP trust boundary. Client-supplied
 `X-Request-Id` values are accepted only when they are bounded visible ASCII.
 Oversized or malformed values are discarded and the HTTP adapter generates a

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -84,6 +85,71 @@ func TestCombineReadinessRunsChecksConcurrently(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("combined readiness did not finish")
+	}
+}
+
+func TestCombineReadinessContainsPanics(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive readiness panic"
+	check := combineReadiness(
+		func(context.Context) error {
+			panic(sensitive)
+		},
+	)
+	if check == nil {
+		t.Fatal("combineReadiness() returned nil")
+	}
+
+	err := check(context.Background())
+	if !errors.Is(err, errReadinessCheckPanic) {
+		t.Fatalf("combined readiness error = %v, want panic sentinel", err)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("combined readiness exposed panic value: %q", err.Error())
+	}
+}
+
+func TestCombineReadinessReturnsOnParentCancellation(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	checkCanceled := make(chan struct{})
+	check := combineReadiness(
+		func(ctx context.Context) error {
+			close(started)
+			<-ctx.Done()
+			close(checkCanceled)
+			return ctx.Err()
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- check(ctx)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("readiness check did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("combined readiness error = %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("combined readiness ignored parent cancellation")
+	}
+
+	select {
+	case <-checkCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("readiness check did not observe parent cancellation")
 	}
 }
 
