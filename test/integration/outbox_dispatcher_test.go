@@ -204,7 +204,6 @@ func TestOutboxDispatcherPublishesToJetStream(t *testing.T) {
 	}
 }
 
-
 func TestOutboxDispatcherPermanentlyRejectedEventFailsWithoutRetry(t *testing.T) {
 	pool, ctx := openTestPool(t)
 	if _, err := pool.Exec(ctx, "DELETE FROM outbox_events"); err != nil {
@@ -261,22 +260,20 @@ func TestOutboxDispatcherPermanentlyRejectedEventFailsWithoutRetry(t *testing.T)
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		var (
-			failed      bool
-			published   bool
-			attempts    int
-			availableAt time.Time
+			failed    bool
+			published bool
+			attempts  int
 		)
 		err := pool.QueryRow(
 			ctx,
 			`SELECT
 			    failed_at IS NOT NULL,
 			    published_at IS NOT NULL,
-			    attempts,
-			    available_at
+			    attempts
 			 FROM outbox_events
 			 WHERE event_id = $1`,
 			eventID,
-		).Scan(&failed, &published, &attempts, &availableAt)
+		).Scan(&failed, &published, &attempts)
 		if err != nil {
 			cancelDispatcher()
 			t.Fatalf("read permanent rejection settlement: %v", err)
