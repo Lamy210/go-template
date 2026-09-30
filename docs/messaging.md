@@ -119,12 +119,15 @@ Deterministic caller-input rejections expose safe classification sentinels for
 composition code:
 
 - `ErrInvalidPublishSubject`;
-- `ErrInvalidMessageID`;
-- `ErrMessageTooLarge`.
+- `ErrInvalidMessageID`.
 
-Connection failures, missing stream responses, and other broker/runtime errors
-are deliberately not classified as permanent because retry may succeed after
-infrastructure recovery.
+`ErrMessageTooLarge` remains a size/capacity error, not an immutable caller
+defect. Both broker and managed-stream capacity can change operationally, and
+runtime stream drift can be detected while background dispatch is still active.
+Size rejection therefore remains retryable under the normal finite retry budget.
+
+Connection failures, missing stream responses, size/capacity rejection, and
+other broker/runtime errors are deliberately not classified as permanent.
 
 ## Tracing and context propagation
 

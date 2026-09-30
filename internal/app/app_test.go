@@ -58,7 +58,6 @@ func TestClassifyOutboxPublishErrorMarksOnlyDeterministicRejections(t *testing.T
 	t.Parallel()
 
 	for _, cause := range []error{
-		messaging.ErrMessageTooLarge,
 		messaging.ErrInvalidPublishSubject,
 		messaging.ErrInvalidMessageID,
 	} {
@@ -71,9 +70,13 @@ func TestClassifyOutboxPublishErrorMarksOnlyDeterministicRejections(t *testing.T
 		}
 	}
 
-	transient := errors.New("temporary broker failure")
-	if got := classifyOutboxPublishError(transient); got != transient {
-		t.Fatalf("transient error was reclassified: %v", got)
+	for _, transient := range []error{
+		errors.New("temporary broker failure"),
+		messaging.ErrMessageTooLarge,
+	} {
+		if got := classifyOutboxPublishError(transient); got != transient {
+			t.Fatalf("transient error was reclassified: %v", got)
+		}
 	}
 	if got := classifyOutboxPublishError(nil); got != nil {
 		t.Fatalf("nil error classified as %v", got)

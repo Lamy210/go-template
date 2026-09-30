@@ -215,14 +215,19 @@ retry budget. The wrapper preserves the underlying cause for
 `errors.Is/errors.As`, but its normal `Error()` text is the sanitized
 `outbox publish permanently rejected` sentinel.
 
-The NATS composition classifies only deterministic input/capacity failures as
+The NATS composition classifies only immutable durable-event defects as
 permanent:
 
 - invalid literal publish subject;
-- invalid canonical message ID;
-- final header + payload larger than the known publish limit.
+- invalid canonical message ID.
 
-Transient connection/broker failures remain on the normal finite retry path.
+Size/capacity rejection remains retryable. Broker limits can change
+operationally, and managed JetStream limits can drift before an operator restores
+or intentionally migrates them. The dispatcher therefore uses its normal finite
+retry budget for `ErrMessageTooLarge` instead of marking the durable event
+failed immediately.
+
+Transient connection/broker failures remain on the same finite retry path.
 
 ## Application lifecycle
 
