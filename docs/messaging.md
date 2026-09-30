@@ -150,6 +150,11 @@ only receive a standard `context.Context`.
 When telemetry is disabled, no propagator is installed and messaging behavior is
 otherwise unchanged.
 
+Messaging options are startup extension points. A panic from an option is
+contained during `Open`, the panic value is discarded, the newly opened NATS
+connection is closed, and the caller receives only the sanitized
+`configure nats client` operation error.
+
 Propagation and tracing integrations are non-critical observability hooks.
 Panics from propagator injection/extraction, tracing start, or tracing completion
 are contained at the messaging adapter boundary. Publishing, handler execution,
