@@ -1,6 +1,9 @@
 package natsname
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidate(t *testing.T) {
 	t.Parallel()
@@ -9,6 +12,7 @@ func TestValidate(t *testing.T) {
 		"APP_EVENTS",
 		"app-worker",
 		"consumer_01",
+		strings.Repeat("a", maxNameBytes),
 	}
 	for _, name := range valid {
 		if err := Validate(name); err != nil {
@@ -28,6 +32,8 @@ func TestValidate(t *testing.T) {
 		"app\fworker",
 		"app\rworker",
 		"app\nworker",
+		strings.Repeat("a", maxNameBytes+1),
+		strings.Repeat("界", 86), // 258 UTF-8 bytes.
 	}
 	for _, name := range invalid {
 		if err := Validate(name); err == nil {
