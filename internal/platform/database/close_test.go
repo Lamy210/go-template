@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"strings"
 	"testing"
 	"time"
 )
