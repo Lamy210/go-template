@@ -13,9 +13,15 @@ const (
 	natsHeaderFieldOverhead = int64(4) // colon, space, CR, LF
 )
 
-// ErrMessageTooLarge means the final header + payload size exceeds a known
-// broker or managed-stream publish limit.
-var ErrMessageTooLarge = errors.New("nats message exceeds publish size limit")
+var (
+	// ErrMessageTooLarge means the final header + payload size exceeds a known
+	// broker or managed-stream publish limit.
+	ErrMessageTooLarge = errors.New("nats message exceeds publish size limit")
+	// ErrManagedStreamMessageTooLarge classifies a message that exceeds the
+	// verified application-managed JetStream MaxMsgSize. Unlike the broker's
+	// runtime MaxPayload, this bound is part of the managed stream contract.
+	ErrManagedStreamMessageTooLarge = errors.New("nats message exceeds managed stream size limit")
+)
 
 type streamPublishLimit struct {
 	subjects       []string
@@ -41,7 +47,14 @@ func (l *publishLimits) remember(name string, subjects []string, maxMessageSize 
 }
 
 func (l *publishLimits) forSubject(subject string, serverMaxPayload int64) int64 {
-	limit := positiveLimit(serverMaxPayload)
+	return minPositiveLimit(
+		positiveLimit(serverMaxPayload),
+		l.managedForSubject(subject),
+	)
+}
+
+func (l *publishLimits) managedForSubject(subject string) int64 {
+	var limit int64
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()

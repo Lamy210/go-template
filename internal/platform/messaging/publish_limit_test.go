@@ -71,3 +71,18 @@ func TestPublishLimitsTreatNonPositiveBrokerLimitAsUnbounded(t *testing.T) {
 		t.Fatalf("unmanaged no-limit result = %d, want 0", got)
 	}
 }
+
+func TestPublishLimitsExposeManagedLimitSeparately(t *testing.T) {
+	t.Parallel()
+
+	var limits publishLimits
+	limits.remember("EVENTS", []string{"events.>"}, 1024)
+	limits.remember("EVENTS_SMALL", []string{"events.created"}, 512)
+
+	if got := limits.managedForSubject("events.created"); got != 512 {
+		t.Fatalf("managed events limit = %d, want 512", got)
+	}
+	if got := limits.managedForSubject("unmanaged.created"); got != 0 {
+		t.Fatalf("unmanaged managed-limit result = %d, want 0", got)
+	}
+}

@@ -120,11 +120,16 @@ composition code:
 
 - `ErrInvalidPublishSubject`;
 - `ErrInvalidMessageID`;
-- `ErrMessageTooLarge`.
+- `ErrManagedStreamMessageTooLarge` for the verified application-managed
+  stream `MaxMsgSize` bound.
 
-Connection failures, missing stream responses, and other broker/runtime errors
-are deliberately not classified as permanent because retry may succeed after
-infrastructure recovery.
+`ErrMessageTooLarge` remains the generic size error and is also returned for a
+current server-advertised `max_payload` overflow. The application does not
+treat that broker-runtime limit as permanent because an operational broker
+configuration change can make the same durable event publishable later.
+
+Connection failures, missing stream responses, broker `max_payload` rejection,
+and other runtime errors remain retryable.
 
 ## Tracing and context propagation
 

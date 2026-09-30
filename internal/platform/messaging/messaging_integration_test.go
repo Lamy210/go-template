@@ -185,6 +185,12 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		if !errors.Is(err, messaging.ErrMessageTooLarge) {
 			t.Fatalf("oversized publish error = %v, want messaging.ErrMessageTooLarge", err)
 		}
+		if !errors.Is(err, messaging.ErrManagedStreamMessageTooLarge) {
+			t.Fatalf(
+				"oversized publish error = %v, want messaging.ErrManagedStreamMessageTooLarge",
+				err,
+			)
+		}
 
 		if _, err := client.Publish(
 			ctx,
