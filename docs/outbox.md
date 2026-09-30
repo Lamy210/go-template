@@ -61,6 +61,11 @@ When the runtime dispatcher is wired to telemetry, it reconstructs the stored
 trace context before publishing. The NATS publisher then creates its normal
 publish span and injects a fresh message propagation context.
 
+Propagation is observability metadata, not durable business state. Panics from
+an injected propagation hook are contained at the outbox boundary: enqueue
+continues without partially written trace metadata, and dispatch falls back to
+the original context instead of failing the durable event.
+
 ## Claiming
 
 `Store.Claim` uses PostgreSQL `FOR UPDATE SKIP LOCKED` and commits the claim
