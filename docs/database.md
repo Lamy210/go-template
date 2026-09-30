@@ -149,6 +149,11 @@ expires. The pgx close continues in that goroutine so a later connection
 release can still finish resource destruction, but process shutdown is no
 longer blocked indefinitely.
 
+The goroutine boundary also contains an unexpected closer panic. The panic
+value is discarded and the caller receives only the sanitized
+`close postgres pool` operation error, consistent with the template's other
+infrastructure lifecycle boundaries.
+
 A database error can make readiness fail, but its raw dependency text is not
 returned to HTTP clients.
 
