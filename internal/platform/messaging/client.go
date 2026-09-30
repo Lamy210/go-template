@@ -67,6 +67,19 @@ func WithTracer(tracer OperationTracer) Option {
 	}
 }
 
+func applyOptionSafely(client *Client, option Option) (err error) {
+	if option == nil {
+		return nil
+	}
+	defer func() {
+		if recover() != nil {
+			err = errClientOptionPanic
+		}
+	}()
+	option(client)
+	return nil
+}
+
 // Client owns a NATS connection and the modern JetStream API.
 type Client struct {
 	conn           *nats.Conn
@@ -123,8 +136,9 @@ func Open(cfg ClientConfig, options ...Option) (*Client, error) {
 		requestTimeout: cfg.RequestTimeout,
 	}
 	for _, option := range options {
-		if option != nil {
-			option(client)
+		if err := applyOptionSafely(client, option); err != nil {
+			conn.Close()
+			return nil, newOperationError("configure nats client", err)
 		}
 	}
 	return client, nil
