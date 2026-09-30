@@ -48,7 +48,10 @@ available only through the explicit documentation routes when enabled.
 HTTP panic containment is also transport-owned. The adapter returns the same
 generic `internal_error` contract when a response has not started, logs only
 sanitized request metadata, and aborts already-started responses rather than
-appending a misleading error payload.
+appending a misleading error payload. The final composed handler has the same
+boundary outside optional outer middleware, so an instrumentation or other
+cross-cutting middleware panic cannot fall through to net/http's stack-trace
+panic logging.
 
 Readiness dependency aggregation is composition-owned. Enabled checks run
 concurrently; the first failure cancels sibling checks and returns immediately,
