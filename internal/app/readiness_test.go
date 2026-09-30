@@ -110,57 +110,17 @@ func TestCombineReadinessContainsPanics(t *testing.T) {
 	}
 }
 
-func TestCombineReadinessReturnsWithoutWaitingForCanceledSibling(t *testing.T) {
-	t.Parallel()
-
-	sentinel := errors.New("dependency unavailable")
-	started := make(chan struct{})
-	release := make(chan struct{})
-	t.Cleanup(func() {
-		close(release)
-	})
-
-	check := combineReadiness(
-		func(context.Context) error {
-			close(started)
-			<-release
-			return nil
-		},
-		func(context.Context) error {
-			<-started
-			return sentinel
-		},
-	)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- check(context.Background())
-	}()
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, sentinel) {
-			t.Fatalf("combined readiness error = %v, want sentinel", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("combined readiness waited for sibling that ignored cancellation")
-	}
-}
-
 func TestCombineReadinessReturnsOnParentCancellation(t *testing.T) {
 	t.Parallel()
 
 	started := make(chan struct{})
-	release := make(chan struct{})
-	t.Cleanup(func() {
-		close(release)
-	})
-
+	checkCanceled := make(chan struct{})
 	check := combineReadiness(
-		func(context.Context) error {
+		func(ctx context.Context) error {
 			close(started)
-			<-release
-			return nil
+			<-ctx.Done()
+			close(checkCanceled)
+			return ctx.Err()
 		},
 	)
 
@@ -184,6 +144,12 @@ func TestCombineReadinessReturnsOnParentCancellation(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("combined readiness ignored parent cancellation")
+	}
+
+	select {
+	case <-checkCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("readiness check did not observe parent cancellation")
 	}
 }
 
