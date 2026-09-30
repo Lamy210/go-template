@@ -75,6 +75,7 @@ type Client struct {
 	requestTimeout time.Duration
 	propagator     coreprop.TextMapPropagator
 	tracer         OperationTracer
+	publishLimits  publishLimits
 }
 
 func (c *Client) validateInitialized() error {
@@ -183,15 +184,23 @@ func (c *Client) publishMessage(
 ) (*jetstream.PubAck, error) {
 	operationCtx, endOperation := c.startPublishOperationSafely(ctx, msg.Subject)
 	c.injectPropagationSafely(operationCtx, msg.Header)
+	if msgID != "" {
+		// nats.go's WithMsgID writes the same Nats-Msg-Id header immediately
+		// before sending. Materialize it here so size validation sees the final
+		// transport headers before broker I/O.
+		msg.Header.Set(jetstream.MsgIDHeader, msgID)
+	}
+
+	limit := c.publishLimits.forSubject(msg.Subject, c.conn.MaxPayload())
+	if !messageFitsPublishLimit(msg, limit) {
+		endOperation(ErrMessageTooLarge)
+		return nil, ErrMessageTooLarge
+	}
 
 	publishCtx, cancel := context.WithTimeout(operationCtx, c.requestTimeout)
 	defer cancel()
 
-	var options []jetstream.PublishOpt
-	if msgID != "" {
-		options = append(options, jetstream.WithMsgID(msgID))
-	}
-	ack, err := c.js.PublishMsg(publishCtx, msg, options...)
+	ack, err := c.js.PublishMsg(publishCtx, msg)
 	endOperation(err)
 	return ack, err
 }
