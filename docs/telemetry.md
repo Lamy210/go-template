@@ -160,6 +160,10 @@ but expose only stable operation names through normal error formatting. This
 keeps shutdown/flush diagnostics from leaking collector endpoints or backend
 response details when the application logs its terminal error.
 
+A panic from one trace/metric lifecycle callback is contained inside that
+operation, converted to a generic internal sentinel, and does not prevent sibling
+signal lifecycle work from completing. Panic values are discarded.
+
 Startup failure after telemetry initialization also triggers a bounded fail-safe
 shutdown.
 
