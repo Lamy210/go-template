@@ -96,6 +96,55 @@ func TestLogAttrsWithoutSpanIsEmpty(t *testing.T) {
 	}
 }
 
+func TestZeroValueProviderMethodsAreSafe(t *testing.T) {
+	t.Parallel()
+
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "value")
+
+	for _, provider := range []*Provider{nil, {}} {
+		carrier := otelprop.MapCarrier{}
+		provider.Inject(ctx, carrier)
+		if len(carrier) != 0 {
+			t.Fatalf("Inject() mutated carrier for zero-value provider: %#v", carrier)
+		}
+		if got := provider.Extract(ctx, carrier); got != ctx {
+			t.Fatal("Extract() did not preserve context for zero-value provider")
+		}
+
+		for _, start := range []func(context.Context, string) (context.Context, func(error)){
+			provider.StartPublish,
+			provider.StartProcess,
+		} {
+			operationCtx, end := start(ctx, "orders.created")
+			if operationCtx != ctx {
+				t.Fatal("messaging operation changed context for zero-value provider")
+			}
+			end(errors.New("ignored"))
+		}
+
+		handler := provider.HTTPMiddleware("test")(
+			http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			}),
+		)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, req)
+		if res.Code != http.StatusNoContent {
+			t.Fatalf("HTTP middleware status = %d, want %d", res.Code, http.StatusNoContent)
+		}
+
+		provider.ObserveHTTPRoute(ctx, http.MethodGet, "/widgets/{widgetID}")
+		if err := provider.ForceFlush(ctx); err != nil {
+			t.Fatalf("ForceFlush() error = %v", err)
+		}
+		if err := provider.Shutdown(ctx); err != nil {
+			t.Fatalf("Shutdown() error = %v", err)
+		}
+	}
+}
+
 func TestProviderInjectsAndExtractsW3CTraceContext(t *testing.T) {
 	t.Parallel()
 
