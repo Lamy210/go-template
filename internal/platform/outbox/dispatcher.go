@@ -300,7 +300,7 @@ func (d *Dispatcher) restoreContext(
 	if event.Tracestate != "" {
 		carrier.Set("tracestate", event.Tracestate)
 	}
-	return d.propagator.Extract(ctx, carrier)
+	return extractPropagationSafely(ctx, d.propagator, carrier)
 }
 
 func retryDelay(attempt int, base, maximum time.Duration) time.Duration {
