@@ -537,6 +537,102 @@ func TestShutdownForceClosesActiveConnectionsAfterDeadline(t *testing.T) {
 	}
 }
 
+func TestOuterMiddlewareRuntimePanicReturnsSanitizedInternalError(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive outer middleware runtime panic"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	server := newTestServer(
+		t,
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithOuterMiddleware(func(http.Handler) http.Handler {
+			return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				panic(sensitive)
+			})
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusInternalServerError)
+	}
+	if strings.Contains(res.Body.String(), sensitive) {
+		t.Fatalf("response exposed outer middleware panic value: %s", res.Body.String())
+	}
+	if strings.Contains(logs.String(), sensitive) {
+		t.Fatalf("logs exposed outer middleware panic value: %s", logs.String())
+	}
+
+	var body struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode panic response: %v; body=%s", err, res.Body.String())
+	}
+	if body.Code != internalErrorCode || body.Message != "internal server error" {
+		t.Fatalf("panic response = %#v", body)
+	}
+	if body.RequestID == "" {
+		t.Fatal("outer middleware panic response request_id is empty")
+	}
+	if got := res.Header().Get(middleware.RequestIDHeader); got != body.RequestID {
+		t.Fatalf("response request ID = %q, want %q", got, body.RequestID)
+	}
+}
+
+func TestOuterMiddlewareRuntimePanicAbortsStartedResponse(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive started outer middleware panic"
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	server := newTestServer(
+		t,
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithOuterMiddleware(func(http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = w.Write([]byte("partial"))
+				panic(sensitive)
+			})
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	res := httptest.NewRecorder()
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		server.Handler().ServeHTTP(res, req)
+	}()
+
+	err, ok := recovered.(error)
+	if !ok || !errors.Is(err, http.ErrAbortHandler) {
+		t.Fatalf("recovered = %#v, want http.ErrAbortHandler", recovered)
+	}
+	if got := res.Body.String(); got != "partial" {
+		t.Fatalf("response body = %q, want original partial body only", got)
+	}
+	if strings.Contains(logs.String(), sensitive) {
+		t.Fatalf("logs exposed started outer middleware panic value: %s", logs.String())
+	}
+}
+
 func TestAccessLogIncludesContextAttributes(t *testing.T) {
 	t.Parallel()
 
