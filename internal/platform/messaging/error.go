@@ -8,6 +8,7 @@ var (
 	ErrInvalidPublishSubject = errors.New("invalid nats publish subject")
 	// ErrInvalidMessageID classifies a non-canonical JetStream deduplication ID.
 	ErrInvalidMessageID = errors.New("invalid nats message ID")
+	errClientOptionPanic = errors.New("nats client option panicked")
 )
 
 // operationError retains a dependency cause for errors.Is/errors.As traversal
