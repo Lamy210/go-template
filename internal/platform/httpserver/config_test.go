@@ -1,9 +1,11 @@
 package httpserver
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -96,6 +98,23 @@ func TestNewRejectsInvalidBoundaryInputs(t *testing.T) {
 		WithOuterMiddleware(func(http.Handler) http.Handler { return nil }),
 	); err == nil {
 		t.Fatal("New() nil outer middleware output error = nil")
+	}
+
+	const sensitive = "sensitive outer middleware panic"
+	_, err := New(
+		testConfig(),
+		logger,
+		testServiceInfo(),
+		nil,
+		WithOuterMiddleware(func(http.Handler) http.Handler {
+			panic(sensitive)
+		}),
+	)
+	if !errors.Is(err, errOuterMiddlewarePanic) {
+		t.Fatalf("New() error = %v, want outer middleware panic sentinel", err)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("New() exposed outer middleware panic value: %q", err.Error())
 	}
 }
 
