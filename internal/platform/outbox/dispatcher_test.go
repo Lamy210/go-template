@@ -123,6 +123,50 @@ func TestDispatcherMarksSuccessfulPublish(t *testing.T) {
 	}
 }
 
+type panicExtractPropagator struct{}
+
+func (panicExtractPropagator) Inject(context.Context, coreprop.TextMapCarrier) {}
+
+func (panicExtractPropagator) Extract(context.Context, coreprop.TextMapCarrier) context.Context {
+	panic("sensitive propagation extract panic")
+}
+
+func TestDispatcherContainsPropagationExtractPanic(t *testing.T) {
+	t.Parallel()
+
+	type baseContextKey struct{}
+	ctx := context.WithValue(context.Background(), baseContextKey{}, "base")
+	store := &fakeEventStore{}
+	var gotContext string
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(ctx context.Context, _, _ string, _ []byte) error {
+			gotContext, _ = ctx.Value(baseContextKey{}).(string)
+			return nil
+		},
+		panicExtractPropagator{},
+	)
+
+	event := ClaimedEvent{
+		ID:          1,
+		EventID:     "event-1",
+		Subject:     "example.created",
+		Traceparent: "trace-context",
+		Attempts:    1,
+		LockToken:   "token",
+	}
+	if err := dispatcher.dispatchOne(ctx, event); err != nil {
+		t.Fatalf("dispatchOne() error = %v", err)
+	}
+	if gotContext != "base" {
+		t.Fatalf("publisher context value = %q, want base context fallback", gotContext)
+	}
+	if len(store.published) != 1 {
+		t.Fatalf("published settlements = %d, want 1", len(store.published))
+	}
+}
+
 func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
 	t.Parallel()
 
