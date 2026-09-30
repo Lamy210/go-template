@@ -57,6 +57,48 @@ func TestRunLifecycleOperationsStartsConcurrently(t *testing.T) {
 	}
 }
 
+func TestRunLifecycleOperationsContainsPanicsAndFinishesSiblings(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive telemetry lifecycle panic"
+	siblingFinished := make(chan struct{})
+
+	err := runLifecycleOperations(
+		context.Background(),
+		lifecycleOperation{
+			name: "shutdown telemetry traces",
+			run: func(context.Context) error {
+				panic(sensitive)
+			},
+		},
+		lifecycleOperation{
+			name: "shutdown telemetry metrics",
+			run: func(context.Context) error {
+				close(siblingFinished)
+				return nil
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("runLifecycleOperations() error = nil, want panic error")
+	}
+	if !errors.Is(err, errLifecycleOperationPanic) {
+		t.Fatalf("runLifecycleOperations() error = %v, want panic sentinel", err)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("lifecycle error exposed panic value: %q", err.Error())
+	}
+	if err.Error() != "shutdown telemetry traces" {
+		t.Fatalf("lifecycle error = %q, want sanitized operation name", err.Error())
+	}
+
+	select {
+	case <-siblingFinished:
+	default:
+		t.Fatal("sibling lifecycle operation did not finish")
+	}
+}
+
 func TestRunLifecycleOperationsSanitizesErrorsAndPreservesCauses(t *testing.T) {
 	t.Parallel()
 
