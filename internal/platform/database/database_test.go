@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -136,6 +137,21 @@ func TestInTxRejectsInvalidInputs(t *testing.T) {
 	pool := &pgxpool.Pool{}
 	if err := InTx(context.Background(), pool, nil); err == nil {
 		t.Fatal("InTx() nil callback error = nil")
+	}
+}
+
+func TestInvokeTransactionCallbackContainsPanic(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "sensitive transaction panic"
+	err := invokeTransactionCallback(func(pgx.Tx) error {
+		panic(sensitive)
+	}, nil)
+	if !errors.Is(err, errTransactionCallbackPanic) {
+		t.Fatalf("invokeTransactionCallback() error = %v, want panic sentinel", err)
+	}
+	if strings.Contains(err.Error(), sensitive) {
+		t.Fatalf("invokeTransactionCallback() exposed panic value: %q", err.Error())
 	}
 }
 
