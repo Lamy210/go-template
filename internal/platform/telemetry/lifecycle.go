@@ -15,6 +15,20 @@ type lifecycleResult struct {
 	err   error
 }
 
+var errLifecycleOperationPanic = errors.New("telemetry lifecycle operation panicked")
+
+func invokeLifecycleOperation(
+	ctx context.Context,
+	operation lifecycleOperation,
+) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errLifecycleOperationPanic
+		}
+	}()
+	return operation.run(ctx)
+}
+
 func runLifecycleOperations(
 	ctx context.Context,
 	operations ...lifecycleOperation,
@@ -30,7 +44,7 @@ func runLifecycleOperations(
 				index: index,
 				err: newOperationError(
 					operation.name,
-					operation.run(ctx),
+					invokeLifecycleOperation(ctx, operation),
 				),
 			}
 		}(index, operation)
