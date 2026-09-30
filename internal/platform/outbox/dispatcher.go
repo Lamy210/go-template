@@ -110,6 +110,13 @@ type Dispatcher struct {
 	cfg        DispatcherConfig
 }
 
+func (d *Dispatcher) validateInitialized() error {
+	if d == nil || d.store == nil || d.publisher == nil {
+		return errors.New("outbox dispatcher must be initialized")
+	}
+	return nil
+}
+
 // NewDispatcher validates dependencies and dispatcher bounds.
 func NewDispatcher(
 	store EventStore,
@@ -139,6 +146,10 @@ func NewDispatcher(
 // Broker publish failures are converted into finite retry or permanent-failure
 // state transitions and do not crash the service.
 func (d *Dispatcher) Run(ctx context.Context) error {
+	if err := d.validateInitialized(); err != nil {
+		return err
+	}
+
 	for {
 		if ctx.Err() != nil {
 			return nil
