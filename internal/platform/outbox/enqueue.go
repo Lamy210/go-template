@@ -35,10 +35,7 @@ func Enqueue(
 		return err
 	}
 
-	carrier := newPropagationCarrier()
-	if propagator != nil {
-		propagator.Inject(ctx, carrier)
-	}
+	carrier := injectPropagationSafely(ctx, propagator)
 	traceparent := carrier.Get("traceparent")
 	tracestate := carrier.Get("tracestate")
 

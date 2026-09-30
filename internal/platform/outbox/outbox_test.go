@@ -65,6 +65,41 @@ func TestEnqueuePersistsOnlyTraceContextMetadata(t *testing.T) {
 	}
 }
 
+type panicInjectPropagator struct{}
+
+func (panicInjectPropagator) Inject(_ context.Context, carrier coreprop.TextMapCarrier) {
+	carrier.Set("traceparent", "partial-trace-context")
+	panic("sensitive propagation inject panic")
+}
+
+func (panicInjectPropagator) Extract(ctx context.Context, _ coreprop.TextMapCarrier) context.Context {
+	return ctx
+}
+
+func TestEnqueueContainsPropagationPanicAndDropsPartialMetadata(t *testing.T) {
+	t.Parallel()
+
+	db := &enqueueDBTX{}
+	err := Enqueue(
+		context.Background(),
+		db,
+		Event{ID: "event-1", Subject: "example.created", Payload: []byte("payload")},
+		panicInjectPropagator{},
+	)
+	if err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	if len(db.args) != 5 {
+		t.Fatalf("Exec args = %d, want 5", len(db.args))
+	}
+	if got := db.args[3]; got != "" {
+		t.Fatalf("traceparent = %v, want empty after propagation panic", got)
+	}
+	if got := db.args[4]; got != "" {
+		t.Fatalf("tracestate = %v, want empty after propagation panic", got)
+	}
+}
+
 func TestEnqueueSanitizesDatabaseErrors(t *testing.T) {
 	t.Parallel()
 
