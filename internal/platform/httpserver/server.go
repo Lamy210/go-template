@@ -122,6 +122,10 @@ func New(
 		}
 		handler = wrapped
 	}
+	// Outer middleware executes outside the router-level recovery chain. Keep
+	// one final panic boundary around the fully composed handler so extension
+	// middleware cannot fall through to net/http's stack-trace panic logging.
+	handler = safeRecoverer(logger)(handler)
 
 	return &Server{
 		handler: handler,
@@ -160,18 +164,29 @@ func applyOuterMiddlewareSafely(
 
 func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		value := r.Header.Get(middleware.RequestIDHeader)
-		if !validClientRequestID(value) {
-			if value != "" {
-				r.Header.Del(middleware.RequestIDHeader)
-			}
-			value = rand.Text()
-		}
-
-		w.Header().Set(middleware.RequestIDHeader, value)
-		ctx := context.WithValue(r.Context(), middleware.RequestIDKey, value)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, assignRequestID(w, r))
 	})
+}
+
+func assignRequestID(w http.ResponseWriter, r *http.Request) *http.Request {
+	value := r.Header.Get(middleware.RequestIDHeader)
+	if !validClientRequestID(value) {
+		if value != "" {
+			r.Header.Del(middleware.RequestIDHeader)
+		}
+		value = rand.Text()
+	}
+
+	w.Header().Set(middleware.RequestIDHeader, value)
+	ctx := context.WithValue(r.Context(), middleware.RequestIDKey, value)
+	return r.WithContext(ctx)
+}
+
+func ensureRecoveryRequestID(w http.ResponseWriter, r *http.Request) *http.Request {
+	if middleware.GetReqID(r.Context()) != "" {
+		return r
+	}
+	return assignRequestID(w, r)
 }
 
 func validClientRequestID(value string) bool {
