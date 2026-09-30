@@ -2,9 +2,9 @@ package outbox
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"hash/fnv"
+	"strconv"
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
@@ -352,20 +352,19 @@ func retryDelayForEvent(
 		return envelope
 	}
 	lowerMicros := envelopeMicros - windowMicros
-	slotCount := uint64(windowMicros) + 1
-	offsetMicros := retryJitterHash(eventID, attempt) % slotCount
+	const maxHash = float64(1<<32 - 1)
+	fraction := float64(retryJitterHash(eventID, attempt)) / maxHash
+	offsetMicros := time.Duration(float64(windowMicros) * fraction)
 
-	return time.Duration(uint64(lowerMicros)+offsetMicros) * time.Microsecond
+	return (lowerMicros + offsetMicros) * time.Microsecond
 }
 
-func retryJitterHash(eventID string, attempt int) uint64 {
-	hasher := fnv.New64a()
+func retryJitterHash(eventID string, attempt int) uint32 {
+	hasher := fnv.New32a()
 	_, _ = hasher.Write([]byte(eventID))
-
-	var attemptBytes [8]byte
-	binary.LittleEndian.PutUint64(attemptBytes[:], uint64(attempt))
-	_, _ = hasher.Write(attemptBytes[:])
-	return hasher.Sum64()
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(strconv.Itoa(attempt)))
+	return hasher.Sum32()
 }
 
 func waitForPoll(ctx context.Context, interval time.Duration) error {
