@@ -118,6 +118,11 @@ error remains discoverable through `errors.Is`. The helper also rejects a nil
 pool or nil transaction callback instead of allowing a panic at the common
 transaction boundary.
 
+A panic from the transaction callback is converted to a private sentinel before
+control returns to pgx. This keeps pgx on its normal rollback path while the
+adapter returns only the sanitized `postgres transaction` operation error. The
+panic value itself is discarded.
+
 ## Transactional outbox
 
 `internal/platform/outbox` provides transport-neutral transactional event
