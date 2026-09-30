@@ -102,6 +102,19 @@ Publish subjects are validated as literal NATS subjects before tracing,
 propagation, or broker I/O. Wildcards and malformed subjects therefore fail at
 the messaging adapter boundary instead of consuming broker retry/error paths.
 
+Before broker I/O, publishing also validates the final message size after
+propagation and `Nats-Msg-Id` headers are materialized. The effective limit is
+the smaller positive value of:
+
+- the current server-advertised `max_payload` from the active NATS connection;
+- any verified managed stream `MaxMsgSize` whose subject pattern matches the
+  publish subject.
+
+NATS and JetStream apply these limits to serialized headers plus payload, not
+payload bytes alone. Oversized messages fail locally with
+`messaging.ErrMessageTooLarge` while retaining the normal sanitized
+`publish jetstream message` outer error.
+
 ## Tracing and context propagation
 
 Messaging accepts optional transport-neutral propagation and operation-tracing
@@ -198,6 +211,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - durable consumer provisioning without implicit updates;
 - durable consumer drift rejection while leaving operator-managed metadata alone;
 - message-ID deduplication;
+- header-aware publish-size preflight against managed stream limits;
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
 - panic containment followed by bounded retry without crashing the consumer;
