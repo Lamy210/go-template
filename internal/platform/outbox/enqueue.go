@@ -36,15 +36,7 @@ func Enqueue(
 	}
 
 	carrier := injectPropagationSafely(ctx, propagator)
-	traceparent := carrier.Get("traceparent")
-	tracestate := carrier.Get("tracestate")
-
-	if len(traceparent) > maxTraceparentLen {
-		return newOperationError("enqueue outbox event", errTraceparentTooLong)
-	}
-	if len(tracestate) > maxTracestateLen {
-		return newOperationError("enqueue outbox event", errTracestateTooLong)
-	}
+	traceparent, tracestate := persistedPropagationMetadata(carrier)
 
 	payload := event.Payload
 	if payload == nil {
