@@ -169,6 +169,12 @@ an observability hook fails. Propagation injection is staged in a temporary
 header map so a panicking hook cannot leave partially written trace headers on
 an outbound message.
 
+Publish-size preflight follows the same fail-open policy. The business headers,
+stable `Nats-Msg-Id`, and payload are checked first. Only a business message
+that fits receives propagation headers. If those observability headers alone push
+the final message over the broker or managed-stream limit, the adapter restores
+the pre-propagation header snapshot and publishes without that metadata.
+
 Propagation headers are part of the persisted message metadata. Do not put
 credentials, access tokens, personal data, or unbounded/high-cardinality values
 in OpenTelemetry Baggage. Treat Baggage as broker-visible metadata and keep it
@@ -237,6 +243,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - durable consumer drift rejection while leaving operator-managed metadata alone;
 - message-ID deduplication;
 - header-aware publish-size preflight against managed stream limits;
+- fail-open propagation rollback when observability headers alone exceed a publish limit;
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
 - panic containment followed by bounded retry without crashing the consumer;

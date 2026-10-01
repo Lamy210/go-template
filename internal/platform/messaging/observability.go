@@ -118,3 +118,11 @@ func (c *Client) extractPropagationSafely(
 	}
 	return result
 }
+
+func cloneNATSHeader(header nats.Header) nats.Header {
+	clone := make(nats.Header, len(header))
+	for key, values := range header {
+		clone[key] = append([]string(nil), values...)
+	}
+	return clone
+}
