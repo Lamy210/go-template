@@ -61,22 +61,39 @@ func TestRunLifecycleOperationsReturnsWhenCallbackIgnoresDeadline(t *testing.T) 
 	t.Parallel()
 
 	release := make(chan struct{})
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
 	finished := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
+	done := make(chan error, 1)
 	start := time.Now()
-	err := runLifecycleOperations(
-		ctx,
-		lifecycleOperation{
-			name: "shutdown stuck telemetry signal",
-			run: func(context.Context) error {
-				defer close(finished)
-				<-release
-				return nil
+	go func() {
+		done <- runLifecycleOperations(
+			ctx,
+			lifecycleOperation{
+				name: "shutdown stuck telemetry signal",
+				run: func(context.Context) error {
+					defer close(finished)
+					<-release
+					return nil
+				},
 			},
-		},
-	)
+		)
+	}()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runLifecycleOperations() ignored the caller deadline")
+	}
 	elapsed := time.Since(start)
 	close(release)
 
