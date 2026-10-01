@@ -101,10 +101,10 @@ publish.
 
 Publish subjects are validated as literal NATS subjects before tracing,
 propagation, or broker I/O. Stream, filter, quarantine, and publish subjects must
-also be valid UTF-8 so configuration JSON and protocol text cannot silently
-normalize an invalid Go string into a different subject. Wildcards and malformed
-subjects therefore fail at the messaging adapter boundary instead of consuming
-broker retry/error paths.
+also be valid UTF-8. This prevents configuration JSON from replacing invalid
+bytes with U+FFFD and keeps protocol subjects within the same text contract.
+Wildcards and malformed subjects therefore fail at the messaging adapter
+boundary instead of consuming broker retry/error paths.
 
 Before broker I/O, publishing also validates the final message size after
 propagation and `Nats-Msg-Id` headers are materialized. The effective limit is
