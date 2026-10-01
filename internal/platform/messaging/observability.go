@@ -8,6 +8,28 @@ import (
 
 type operationStarter func(context.Context, string) (context.Context, func(error))
 
+// operationValueContext accepts observability values from an injected tracer
+// while keeping cancellation and deadlines owned by the business context.
+type operationValueContext struct {
+	context.Context
+	values context.Context
+}
+
+func (c operationValueContext) Value(key any) (value any) {
+	if c.values != nil {
+		func() {
+			defer func() {
+				_ = recover()
+			}()
+			value = c.values.Value(key)
+		}()
+		if value != nil {
+			return value
+		}
+	}
+	return c.Context.Value(key)
+}
+
 func (c *Client) startPublishOperationSafely(
 	ctx context.Context,
 	destination string,
@@ -49,7 +71,10 @@ func startOperationSafely(
 
 	startedCtx, finish := start(ctx, destination)
 	if startedCtx != nil {
-		operationCtx = startedCtx
+		operationCtx = operationValueContext{
+			Context: ctx,
+			values:  startedCtx,
+		}
 	}
 	if finish != nil {
 		end = func(err error) {
