@@ -73,6 +73,12 @@ an injected propagation hook are contained at the outbox boundary: enqueue
 continues without partially written trace metadata, and dispatch falls back to
 the original context instead of failing the durable event.
 
+Persistence applies the same fail-open policy to unsafe propagation text.
+Oversized, invalid-UTF-8, or NUL-containing `traceparent` is dropped together
+with `tracestate`; an unsafe `tracestate` is dropped independently while a
+safe `traceparent` is retained. Metadata is never byte-truncated into another
+trace value.
+
 ## Claiming
 
 `Store.Claim` uses PostgreSQL `FOR UPDATE SKIP LOCKED` and commits the claim
