@@ -155,6 +155,8 @@ func TestEventValidateBounds(t *testing.T) {
 		{ID: " event-1", Subject: "subject"},
 		{ID: "event-1 ", Subject: "subject"},
 		{ID: "event\n1", Subject: "subject"},
+		{ID: string([]byte{0xff}), Subject: "subject"},
+		{ID: "event-" + string([]byte{0xc3, 0x28}), Subject: "subject"},
 		{ID: "id", Subject: ""},
 		{ID: "id", Subject: "subject", Payload: make([]byte, maxPayloadBytes+1)},
 	}
