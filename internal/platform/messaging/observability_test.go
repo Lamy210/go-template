@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
