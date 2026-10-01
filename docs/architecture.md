@@ -194,7 +194,8 @@ state transitions, while storage or settlement failures stop the runtime rather
 than hiding uncertain durable state.
 
 Only `traceparent` and `tracestate` are persisted. Baggage is deliberately
-excluded from durable outbox metadata.
+excluded from durable outbox metadata. Unsafe propagation metadata fails open:
+it is discarded rather than making durable business enqueue fail.
 
 See [outbox.md](outbox.md).
 
