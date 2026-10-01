@@ -26,6 +26,8 @@ func TestValidatePattern(t *testing.T) {
 		"events.foo*",
 		"events.>.work",
 		"events work",
+		string([]byte{0xff}),
+		"events." + string([]byte{0xc3, 0x28}),
 	}
 	for _, subject := range invalid {
 		if err := ValidatePattern(subject); err == nil {
@@ -37,7 +39,13 @@ func TestValidatePattern(t *testing.T) {
 func TestValidateLiteralRejectsWildcards(t *testing.T) {
 	t.Parallel()
 
-	for _, subject := range []string{"events.*", "events.>", ">"} {
+	for _, subject := range []string{
+		"events.*",
+		"events.>",
+		">",
+		string([]byte{0xff}),
+		"events." + string([]byte{0xc3, 0x28}),
+	} {
 		if err := ValidateLiteral(subject); err == nil {
 			t.Fatalf("ValidateLiteral(%q) error = nil, want wildcard error", subject)
 		}
