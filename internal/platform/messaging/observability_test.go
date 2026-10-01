@@ -97,6 +97,25 @@ func TestInjectPropagationSafelyDiscardsPartialWritesAfterPanic(t *testing.T) {
 	}
 }
 
+func TestCloneNATSHeaderDoesNotAliasValues(t *testing.T) {
+	t.Parallel()
+
+	original := nats.Header{
+		"X-Business": {"keep"},
+	}
+	cloned := cloneNATSHeader(original)
+
+	original["X-Business"][0] = "changed"
+	original.Set("X-New", "new")
+
+	if got := cloned.Get("X-Business"); got != "keep" {
+		t.Fatalf("cloned business header = %q, want keep", got)
+	}
+	if got := cloned.Get("X-New"); got != "" {
+		t.Fatalf("cloned new header = %q, want empty", got)
+	}
+}
+
 func TestExtractPropagationSafelyFallsBackToInputContext(t *testing.T) {
 	t.Parallel()
 
