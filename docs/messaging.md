@@ -169,12 +169,11 @@ an observability hook fails. Propagation injection is staged in a temporary
 header map so a panicking hook cannot leave partially written trace headers on
 an outbound message.
 
-Publish-size preflight follows the same fail-open policy. If propagation headers
-alone push an otherwise valid message over the broker or managed-stream limit,
-the adapter restores the pre-propagation business headers, reapplies the stable
-`Nats-Msg-Id`, and retries the preflight without observability metadata. The
-publish fails with `ErrMessageTooLarge` only when the business headers, stable
-message ID, and payload still exceed the limit.
+Publish-size preflight follows the same fail-open policy. The business headers,
+stable `Nats-Msg-Id`, and payload are checked first. Only a business message
+that fits receives propagation headers. If those observability headers alone push
+the final message over the broker or managed-stream limit, the adapter restores
+the pre-propagation header snapshot and publishes without that metadata.
 
 Propagation headers are part of the persisted message metadata. Do not put
 credentials, access tokens, personal data, or unbounded/high-cardinality values
