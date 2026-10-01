@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/textproto"
 	"strings"
+	"unicode/utf8"
 )
 
 var errInvalid = errors.New("message ID must be canonical text")
@@ -17,7 +18,7 @@ var errInvalid = errors.New("message ID must be canonical text")
 // or LF characters. Rejecting those forms preserves exact stable-ID semantics
 // for deduplication keys while otherwise allowing arbitrary UTF-8 text.
 func Validate(id string) error {
-	if id == "" {
+	if id == "" || !utf8.ValidString(id) {
 		return errInvalid
 	}
 	if textproto.TrimString(id) != id || strings.ContainsAny(id, "\r\n") {
