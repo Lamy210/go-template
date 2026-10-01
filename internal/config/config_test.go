@@ -356,6 +356,24 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid UTF-8 stream subject",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Subjects = []string{"app.events." + string([]byte{0xff})}
+			},
+		},
+		{
+			name: "invalid UTF-8 filter subject",
+			mutate: func(cfg *NATSConfig) {
+				cfg.FilterSubject = "app.events." + string([]byte{0xff})
+			},
+		},
+		{
+			name: "invalid UTF-8 quarantine subject",
+			mutate: func(cfg *NATSConfig) {
+				cfg.QuarantineSubject = "app.events." + string([]byte{0xff})
+			},
+		},
+		{
 			name: "pull expiry below library minimum",
 			mutate: func(cfg *NATSConfig) {
 				cfg.PullExpiry = 500 * time.Millisecond
