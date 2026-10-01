@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/messageid"
@@ -32,6 +33,9 @@ func (c ClientConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.Name) == "" {
 		return errors.New("nats client name must not be empty")
+	}
+	if !utf8.ValidString(c.Name) {
+		return errors.New("nats client name must be valid UTF-8")
 	}
 	if c.ConnectTimeout <= 0 || c.ReconnectWait <= 0 || c.DrainTimeout <= 0 || c.RequestTimeout <= 0 {
 		return errors.New("nats client timeouts must be positive")

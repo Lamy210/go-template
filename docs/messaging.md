@@ -16,7 +16,8 @@ The profile deliberately overrides unbounded server/client defaults.
 
 The NATS client default reconnect limit is finite, but the template still sets
 it explicitly. Negative reconnect counts are rejected because they mean retry
-forever.
+forever. Client names must be valid UTF-8 before CONNECT serialization so JSON
+encoding cannot replace invalid bytes and change the broker-visible identity.
 
 JetStream consumers are also configured explicitly. Durable consumers are
 created when missing, but an existing durable is never updated implicitly by

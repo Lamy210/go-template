@@ -50,6 +50,31 @@ func TestClientConfigRejectsBlankConnectionIdentity(t *testing.T) {
 	}
 }
 
+func TestClientConfigRejectsInvalidUTF8Name(t *testing.T) {
+	t.Parallel()
+
+	base := ClientConfig{
+		URL:            "nats://127.0.0.1:4222",
+		Name:           "test",
+		ConnectTimeout: time.Second,
+		ReconnectWait:  time.Second,
+		MaxReconnects:  1,
+		DrainTimeout:   time.Second,
+		RequestTimeout: time.Second,
+	}
+
+	for _, name := range []string{
+		string([]byte{0xff}),
+		"worker-" + string([]byte{0xc3, 0x28}),
+	} {
+		cfg := base
+		cfg.Name = name
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want invalid UTF-8 name error", name)
+		}
+	}
+}
+
 func TestClientConfigRejectsUnlimitedReconnects(t *testing.T) {
 	t.Parallel()
 
