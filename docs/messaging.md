@@ -162,12 +162,14 @@ connection is closed, and the caller receives only the sanitized
 `configure nats client` operation error.
 
 Propagation and tracing integrations are non-critical observability hooks.
-Panics from propagator injection/extraction, tracing start, or tracing completion
-are contained at the messaging adapter boundary. Publishing, handler execution,
-retry/quarantine, and acknowledgement continue using the original context when
-an observability hook fails. Propagation injection is staged in a temporary
-header map so a panicking hook cannot leave partially written trace headers on
-an outbound message.
+Panics from propagator injection/extraction, tracing start, tracing completion,
+or tracer-provided context value lookup are contained at the messaging adapter
+boundary. Publishing, handler execution, retry/quarantine, and acknowledgement
+continue using the business context when an observability hook fails. A tracer
+may add context values such as span state, but it cannot replace the caller's
+deadline or cancellation lifetime. Propagation injection is staged in a
+temporary header map so a panicking hook cannot leave partially written trace
+headers on an outbound message.
 
 Publish-size preflight follows the same fail-open policy. The business headers,
 stable `Nats-Msg-Id`, and payload are checked first. Only a business message
