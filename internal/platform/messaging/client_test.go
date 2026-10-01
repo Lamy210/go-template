@@ -74,6 +74,8 @@ func TestPublishRejectsInvalidLiteralSubjectBeforeBrokerUse(t *testing.T) {
 		"events.>",
 		"events..created",
 		"events created",
+		string([]byte{0xff}),
+		"events." + string([]byte{0xc3, 0x28}),
 	} {
 		_, err := client.Publish(
 			context.Background(),
