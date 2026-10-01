@@ -25,6 +25,7 @@ func TestValidate(t *testing.T) {
 		"event-1\t",
 		"event\n1",
 		"event\r1",
+		"event\x001",
 		string([]byte{0xff}),
 		"event-" + string([]byte{0xc3, 0x28}),
 	}

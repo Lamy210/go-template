@@ -93,7 +93,7 @@ JetStream's message-ID deduplication. Callers should use an operation/event ID,
 not generate a new ID on every retry.
 
 Non-empty message IDs must be canonical valid UTF-8 text: no invalid UTF-8
-byte sequences, leading/trailing ASCII whitespace, or CR/LF characters. The
+byte sequences, NUL, leading/trailing ASCII whitespace, or CR/LF characters. The
 pinned NATS client normalizes the whitespace/newline forms when serializing
 header values; rejecting non-canonical text locally keeps the application ID on
 one stable text contract before it becomes the broker's `Nats-Msg-Id`. An empty

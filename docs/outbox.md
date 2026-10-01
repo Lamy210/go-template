@@ -47,12 +47,12 @@ Each event stores:
 
 `event_id` is unique and becomes the external message deduplication ID. It
 must be canonical valid UTF-8 text with no invalid UTF-8 byte sequences,
-leading/trailing ASCII whitespace, or CR/LF characters. This keeps the durable
+NUL, leading/trailing ASCII whitespace, or CR/LF characters. This keeps the durable
 application ID on the same stable text contract used by the default NATS
 dispatcher when it becomes `Nats-Msg-Id`.
 
-The durable subject must contain 1-255 bytes and be valid UTF-8 before
-PostgreSQL is touched. The outbox deliberately does not validate NATS wildcard
+The durable subject must contain 1-255 bytes, be valid UTF-8, and exclude
+NUL before PostgreSQL is touched. The outbox deliberately does not validate NATS wildcard
 or token grammar: it remains transport-neutral, and a configured publisher owns
 transport-specific subject validation.
 
