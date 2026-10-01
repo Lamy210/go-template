@@ -167,7 +167,7 @@ or tracer-provided context value lookup are contained at the messaging adapter
 boundary. Publishing, handler execution, retry/quarantine, and acknowledgement
 continue using the business context when an observability hook fails. A tracer
 may add context values such as span state, but it cannot replace the caller's
-deadline or cancellation lifetime. Propagation injection is staged in a
+deadline, cancellation lifetime, or cancellation cause. Propagation injection is staged in a
 temporary header map so a panicking hook cannot leave partially written trace
 headers on an outbound message.
 
