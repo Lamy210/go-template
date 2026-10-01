@@ -61,6 +61,14 @@ func (panickingStartTracer) StartProcess(
 	panic("sensitive process tracer panic")
 }
 
+type panickingValueContext struct {
+	context.Context
+}
+
+func (panickingValueContext) Value(any) any {
+	panic("sensitive tracer context value panic")
+}
+
 type panickingFinishTracer struct{}
 
 func (panickingFinishTracer) StartPublish(
@@ -163,6 +171,28 @@ func TestStartOperationSafelyContainsStartPanic(t *testing.T) {
 			}
 			end(errors.New("ignored by no-op finish"))
 		})
+	}
+}
+
+func TestStartOperationSafelyContainsTracerContextValuePanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(
+		context.Background(),
+		observabilityContextKey{},
+		"business",
+	)
+	gotCtx, end := startOperationSafely(
+		ctx,
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return panickingValueContext{Context: context.Background()}, nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "business" {
+		t.Fatalf("operation context fallback value = %q, want business", value)
 	}
 }
 
