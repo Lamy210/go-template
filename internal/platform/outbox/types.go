@@ -73,6 +73,9 @@ func (e Event) Validate() error {
 	if !utf8.ValidString(e.Subject) {
 		return errors.New("outbox subject must be valid UTF-8")
 	}
+	if strings.ContainsRune(e.Subject, '\x00') {
+		return errors.New("outbox subject must not contain NUL")
+	}
 	if len(e.Payload) > maxPayloadBytes {
 		return fmt.Errorf("outbox payload must not exceed %d bytes", maxPayloadBytes)
 	}
