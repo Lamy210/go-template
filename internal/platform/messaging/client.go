@@ -206,8 +206,6 @@ func (c *Client) publishMessage(
 	msgID string,
 ) (*jetstream.PubAck, error) {
 	operationCtx, endOperation := c.startPublishOperationSafely(ctx, msg.Subject)
-	prePropagationHeader := cloneNATSHeader(msg.Header)
-	c.injectPropagationSafely(operationCtx, msg.Header)
 	if msgID != "" {
 		// nats.go's WithMsgID writes the same Nats-Msg-Id header immediately
 		// before sending. Materialize it here so size validation sees the final
@@ -217,17 +215,17 @@ func (c *Client) publishMessage(
 
 	limit := c.publishLimits.forSubject(msg.Subject, c.conn.MaxPayload())
 	if !messageFitsPublishLimit(msg, limit) {
-		// Propagation is optional observability metadata. If it alone pushed an
-		// otherwise valid business message over the transport limit, restore
-		// the caller-owned headers and retry the preflight without propagation.
-		msg.Header = prePropagationHeader
-		if msgID != "" {
-			msg.Header.Set(jetstream.MsgIDHeader, msgID)
-		}
-	}
-	if !messageFitsPublishLimit(msg, limit) {
 		endOperation(ErrMessageTooLarge)
 		return nil, ErrMessageTooLarge
+	}
+
+	prePropagationHeader := cloneNATSHeader(msg.Header)
+	c.injectPropagationSafely(operationCtx, msg.Header)
+	if !messageFitsPublishLimit(msg, limit) {
+		// Propagation is optional observability metadata. The business message
+		// already passed preflight, so restore it instead of allowing telemetry
+		// metadata to turn a valid publish into a capacity failure.
+		msg.Header = prePropagationHeader
 	}
 
 	publishCtx, cancel := context.WithTimeout(operationCtx, c.requestTimeout)
