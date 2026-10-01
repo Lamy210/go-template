@@ -8,8 +8,9 @@ import (
 
 type operationStarter func(context.Context, string) (context.Context, func(error))
 
-// operationValueContext accepts observability values from an injected tracer
-// while keeping cancellation and deadlines owned by the business context.
+// operationValueContext accepts observability values from a tracer or
+// propagator while keeping cancellation and deadlines owned by the business
+// context.
 type operationValueContext struct {
 	context.Context
 	values context.Context
@@ -28,6 +29,19 @@ func (c operationValueContext) Value(key any) (value any) {
 		}
 	}
 	return c.Context.Value(key)
+}
+
+func contextWithObservabilityValues(
+	ctx context.Context,
+	values context.Context,
+) context.Context {
+	if values == nil {
+		return ctx
+	}
+	return operationValueContext{
+		Context: ctx,
+		values:  context.WithoutCancel(values),
+	}
 }
 
 func (c *Client) startPublishOperationSafely(
@@ -71,13 +85,7 @@ func startOperationSafely(
 
 	startedCtx, finish := start(ctx, destination)
 	if startedCtx != nil {
-		operationCtx = operationValueContext{
-			Context: ctx,
-			// Keep tracer-added values, but strip its cancellation/deadline
-			// internals so context.Cause and other context machinery continue
-			// to observe the business context as authoritative.
-			values: context.WithoutCancel(startedCtx),
-		}
+		operationCtx = contextWithObservabilityValues(ctx, startedCtx)
 	}
 	if finish != nil {
 		end = func(err error) {
@@ -142,7 +150,7 @@ func (c *Client) extractPropagationSafely(
 	}()
 	extracted := c.propagator.Extract(ctx, natsHeaderCarrier{header: header})
 	if extracted != nil {
-		result = extracted
+		result = contextWithObservabilityValues(ctx, extracted)
 	}
 	return result
 }
