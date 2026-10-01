@@ -35,7 +35,8 @@ type extractedContextPropagator struct {
 func (p extractedContextPropagator) Inject(
 	context.Context,
 	coreprop.TextMapCarrier,
-) {}
+) {
+}
 
 func (p extractedContextPropagator) Extract(
 	context.Context,
