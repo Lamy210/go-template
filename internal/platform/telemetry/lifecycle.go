@@ -51,9 +51,18 @@ func runLifecycleOperations(
 	}
 
 	errs := make([]error, len(operations))
-	for range operations {
-		result := <-results
-		errs[result.index] = result.err
+	remaining := len(operations)
+	for remaining > 0 {
+		select {
+		case result := <-results:
+			errs[result.index] = result.err
+			remaining--
+		case <-ctx.Done():
+			return errors.Join(
+				errors.Join(errs...),
+				newOperationError("wait for telemetry lifecycle operations", ctx.Err()),
+			)
+		}
 	}
 	return errors.Join(errs...)
 }
