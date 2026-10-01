@@ -57,6 +57,63 @@ func TestRunLifecycleOperationsStartsConcurrently(t *testing.T) {
 	}
 }
 
+func TestRunLifecycleOperationsReturnsWhenCallbackIgnoresDeadline(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
+	finished := make(chan struct{})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		done <- runLifecycleOperations(
+			ctx,
+			lifecycleOperation{
+				name: "shutdown stuck telemetry signal",
+				run: func(context.Context) error {
+					defer close(finished)
+					<-release
+					return nil
+				},
+			},
+		)
+	}()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runLifecycleOperations() ignored the caller deadline")
+	}
+	elapsed := time.Since(start)
+	close(release)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("runLifecycleOperations() error = %v, want deadline exceeded", err)
+	}
+	if got := err.Error(); got != "wait for telemetry lifecycle operations" {
+		t.Fatalf("runLifecycleOperations() error text = %q", got)
+	}
+	if elapsed >= time.Second {
+		t.Fatalf("runLifecycleOperations() took %v, want bounded deadline return", elapsed)
+	}
+
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("released lifecycle callback did not finish")
+	}
+}
+
 func TestRunLifecycleOperationsContainsPanicsAndFinishesSiblings(t *testing.T) {
 	t.Parallel()
 
