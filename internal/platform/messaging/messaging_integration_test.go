@@ -228,6 +228,53 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		); err != nil {
 			t.Fatalf("small publish after preflight rejection: %v", err)
 		}
+
+		const fallbackSubject = "template.small.propagation-fallback"
+		rawConn, err := nats.Connect(natsURL)
+		if err != nil {
+			t.Fatalf("open raw subscriber connection: %v", err)
+		}
+		t.Cleanup(rawConn.Close)
+
+		sub, err := rawConn.SubscribeSync(fallbackSubject)
+		if err != nil {
+			t.Fatalf("subscribe propagation-fallback subject: %v", err)
+		}
+		if err := rawConn.Flush(); err != nil {
+			t.Fatalf("flush propagation-fallback subscription: %v", err)
+		}
+
+		const fallbackMsgID = "size-propagation-fallback"
+		publishCtx := context.WithValue(
+			ctx,
+			testPropagationKey{},
+			strings.Repeat("c", 64),
+		)
+		if _, err := client.Publish(
+			publishCtx,
+			fallbackSubject,
+			fallbackMsgID,
+			make([]byte, 170),
+		); err != nil {
+			t.Fatalf("publish after dropping oversized propagation: %v", err)
+		}
+
+		received, err := sub.NextMsg(5 * time.Second)
+		if err != nil {
+			t.Fatalf("receive propagation-fallback message: %v", err)
+		}
+		if got := received.Header.Get(testCorrelationHeader); got != "" {
+			t.Fatalf("correlation propagation header = %q, want dropped", got)
+		}
+		if got := received.Header.Get(testTraceHeader); got != "" {
+			t.Fatalf("trace propagation header = %q, want dropped", got)
+		}
+		if got := received.Header.Get(jetstream.MsgIDHeader); got != fallbackMsgID {
+			t.Fatalf("message ID header = %q, want %q", got, fallbackMsgID)
+		}
+		if got := len(received.Data); got != 170 {
+			t.Fatalf("payload len = %d, want 170", got)
+		}
 	})
 
 	first, err := client.Publish(ctx, "template.events.work", "dedup-1", []byte("deduplicated"))
