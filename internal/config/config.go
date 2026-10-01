@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -135,8 +136,14 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.ServiceName) == "" {
 		return fmt.Errorf("SERVICE_NAME must not be empty")
 	}
+	if !utf8.ValidString(c.ServiceName) {
+		return fmt.Errorf("SERVICE_NAME must be valid UTF-8")
+	}
 	if strings.TrimSpace(c.Environment) == "" {
 		return fmt.Errorf("APP_ENV must not be empty")
+	}
+	if !utf8.ValidString(c.Environment) {
+		return fmt.Errorf("APP_ENV must be valid UTF-8")
 	}
 	if strings.TrimSpace(c.HTTP.Addr) == "" {
 		return fmt.Errorf("HTTP_ADDR must not be empty")
