@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -46,7 +47,7 @@ func PatternMatchesLiteral(pattern, literal string) bool {
 }
 
 func validate(subject string, wildcards bool) error {
-	if subject == "" {
+	if subject == "" || !utf8.ValidString(subject) {
 		return validationError(wildcards)
 	}
 
