@@ -18,7 +18,8 @@ type extractedOutboxContextPropagator struct {
 func (p extractedOutboxContextPropagator) Inject(
 	context.Context,
 	coreprop.TextMapCarrier,
-) {}
+) {
+}
 
 func (p extractedOutboxContextPropagator) Extract(
 	context.Context,
