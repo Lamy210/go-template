@@ -12,6 +12,8 @@ func TestValidate(t *testing.T) {
 		"APP_EVENTS",
 		"app-worker",
 		"consumer_01",
+		"東京-worker",
+		"worker-雪",
 		strings.Repeat("a", maxNameBytes),
 	}
 	for _, name := range valid {
@@ -32,6 +34,12 @@ func TestValidate(t *testing.T) {
 		"app\fworker",
 		"app\rworker",
 		"app\nworker",
+		"app\vworker",
+		"app\x00worker",
+		"app\x01worker",
+		"app\x7fworker",
+		"app\u00a0worker",
+		"app\u200bworker",
 		string([]byte{0xff}),
 		"worker-" + string([]byte{0xc3, 0x28}),
 		strings.Repeat("a", maxNameBytes+1),

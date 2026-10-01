@@ -187,7 +187,13 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 func TestStreamConfigRejectsInvalidName(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"TEST.EVENTS", string([]byte{0xff})} {
+	for _, name := range []string{
+		"TEST.EVENTS",
+		"TEST\x00EVENTS",
+		"TEST\vEVENTS",
+		"TEST\u00a0EVENTS",
+		string([]byte{0xff}),
+	} {
 		cfg := testConsumerConfig().Stream
 		cfg.Name = name
 		if err := cfg.Validate(); err == nil {
@@ -199,7 +205,13 @@ func TestStreamConfigRejectsInvalidName(t *testing.T) {
 func TestConsumerConfigRejectsInvalidDurableName(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"worker/name", string([]byte{0xff})} {
+	for _, name := range []string{
+		"worker/name",
+		"worker\x00name",
+		"worker\vname",
+		"worker\u200bname",
+		string([]byte{0xff}),
+	} {
 		cfg := testConsumerConfig()
 		cfg.Durable = name
 		if err := cfg.Validate(); err == nil {

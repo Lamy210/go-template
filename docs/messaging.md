@@ -64,11 +64,12 @@ stream retention/size limits, replace subjects, or alter a worker's ack/retry
 contract. Managed drift fails startup until an operator performs the intended
 JetStream migration.
 
-Stream and durable consumer names are validated against the nats.go v1.54.0
-JetStream name grammar before broker I/O. Names must also be valid UTF-8 so JSON
-serialization cannot replace invalid bytes and change the resource identifier on
-the wire. Wildcards, dots, whitespace, slashes, and backslashes are rejected
-locally instead of surfacing as server-side provisioning failures.
+Stream and durable consumer names are validated before broker I/O against the
+JetStream naming constraints used by the pinned NATS profile. Names must be
+valid UTF-8 and printable; wildcards, dots, all Unicode whitespace, path
+separators, and non-printable characters such as NUL are rejected locally
+instead of surfacing as server-side provisioning failures. Valid printable
+Unicode names remain supported.
 
 The application does not register a fake business consumer. Consumer handlers
 belong to a feature/application package and call `RunConsumer` with the
