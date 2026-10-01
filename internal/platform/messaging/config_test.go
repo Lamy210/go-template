@@ -211,10 +211,16 @@ func TestConsumerConfigRejectsInvalidDurableName(t *testing.T) {
 func TestStreamConfigRejectsInvalidSubjectPattern(t *testing.T) {
 	t.Parallel()
 
-	cfg := testConsumerConfig().Stream
-	cfg.Subjects = []string{"events.>.invalid"}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("Validate() error = nil, want invalid subject pattern error")
+	for _, subject := range []string{
+		"events.>.invalid",
+		string([]byte{0xff}),
+		"events." + string([]byte{0xc3, 0x28}),
+	} {
+		cfg := testConsumerConfig().Stream
+		cfg.Subjects = []string{subject}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want invalid subject pattern error", subject)
+		}
 	}
 }
 
@@ -241,6 +247,18 @@ func TestConsumerConfigRejectsQuarantineRecapture(t *testing.T) {
 			name: "invalid filter wildcard placement",
 			mutate: func(cfg *ConsumerConfig) {
 				cfg.FilterSubject = "events.>.work"
+			},
+		},
+		{
+			name: "invalid UTF-8 filter subject",
+			mutate: func(cfg *ConsumerConfig) {
+				cfg.FilterSubject = "events." + string([]byte{0xff})
+			},
+		},
+		{
+			name: "invalid UTF-8 quarantine subject",
+			mutate: func(cfg *ConsumerConfig) {
+				cfg.QuarantineSubject = "events." + string([]byte{0xff})
 			},
 		},
 	}
