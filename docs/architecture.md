@@ -160,7 +160,7 @@ high-cardinality values. HTTP methods use the shared stdlib-only
 `internal/httpmethod` policy: standard methods are preserved and every unknown
 token is collapsed to the fixed `HTTP` bucket for both access logs and telemetry.
 
-Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics.
+Telemetry is not a readiness dependency. Collector or backend failure may reduce observability, but it must not make a healthy service unavailable. Asynchronous SDK errors are logged without raw exporter/backend diagnostics. Telemetry lifecycle fan-out also bounds the caller's wait by its context deadline even if an SDK callback fails to honor cancellation.
 
 HTTP observability callbacks follow the same availability rule. Panics from the
 optional route observer or context-log-attribute callback are contained at the
