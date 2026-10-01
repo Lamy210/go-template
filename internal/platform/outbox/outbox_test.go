@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,27 @@ func TestEnqueuePersistsOnlyTraceContextMetadata(t *testing.T) {
 	}
 }
 
+type staticTracePropagator struct {
+	traceparent string
+	tracestate  string
+}
+
+func (p staticTracePropagator) Inject(_ context.Context, carrier coreprop.TextMapCarrier) {
+	if p.traceparent != "" {
+		carrier.Set("traceparent", p.traceparent)
+	}
+	if p.tracestate != "" {
+		carrier.Set("tracestate", p.tracestate)
+	}
+}
+
+func (staticTracePropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type panicInjectPropagator struct{}
 
 func (panicInjectPropagator) Inject(_ context.Context, carrier coreprop.TextMapCarrier) {
@@ -97,6 +119,106 @@ func TestEnqueueContainsPropagationPanicAndDropsPartialMetadata(t *testing.T) {
 	}
 	if got := db.args[4]; got != "" {
 		t.Fatalf("tracestate = %v, want empty after propagation panic", got)
+	}
+}
+
+func TestEnqueueDropsUnsafePropagationMetadata(t *testing.T) {
+	t.Parallel()
+
+	validTraceparent := "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+	tests := []struct {
+		name            string
+		propagator      staticTracePropagator
+		wantTraceparent string
+		wantTracestate  string
+	}{
+		{
+			name: "missing traceparent drops tracestate",
+			propagator: staticTracePropagator{
+				tracestate: "vendor=value",
+			},
+		},
+		{
+			name: "oversized traceparent drops both",
+			propagator: staticTracePropagator{
+				traceparent: strings.Repeat("a", maxTraceparentLen+1),
+				tracestate:  "vendor=value",
+			},
+		},
+		{
+			name: "invalid UTF-8 traceparent drops both",
+			propagator: staticTracePropagator{
+				traceparent: "00-" + string([]byte{0xff}),
+				tracestate:  "vendor=value",
+			},
+		},
+		{
+			name: "NUL traceparent drops both",
+			propagator: staticTracePropagator{
+				traceparent: validTraceparent + "\x00",
+				tracestate:  "vendor=value",
+			},
+		},
+		{
+			name: "oversized tracestate keeps traceparent",
+			propagator: staticTracePropagator{
+				traceparent: validTraceparent,
+				tracestate:  strings.Repeat("a", maxTracestateLen+1),
+			},
+			wantTraceparent: validTraceparent,
+		},
+		{
+			name: "invalid UTF-8 tracestate keeps traceparent",
+			propagator: staticTracePropagator{
+				traceparent: validTraceparent,
+				tracestate:  "vendor=" + string([]byte{0xff}),
+			},
+			wantTraceparent: validTraceparent,
+		},
+		{
+			name: "NUL tracestate keeps traceparent",
+			propagator: staticTracePropagator{
+				traceparent: validTraceparent,
+				tracestate:  "vendor=value\x00",
+			},
+			wantTraceparent: validTraceparent,
+		},
+		{
+			name: "safe metadata is preserved",
+			propagator: staticTracePropagator{
+				traceparent: validTraceparent,
+				tracestate:  "vendor=value",
+			},
+			wantTraceparent: validTraceparent,
+			wantTracestate:  "vendor=value",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db := &enqueueDBTX{}
+			err := Enqueue(
+				context.Background(),
+				db,
+				Event{ID: "event-1", Subject: "example.created"},
+				tt.propagator,
+			)
+			if err != nil {
+				t.Fatalf("Enqueue() error = %v", err)
+			}
+			if len(db.args) != 5 {
+				t.Fatalf("Exec args = %d, want 5", len(db.args))
+			}
+			if got := db.args[3]; got != tt.wantTraceparent {
+				t.Fatalf("traceparent = %q, want %q", got, tt.wantTraceparent)
+			}
+			if got := db.args[4]; got != tt.wantTracestate {
+				t.Fatalf("tracestate = %q, want %q", got, tt.wantTracestate)
+			}
+		})
 	}
 }
 
