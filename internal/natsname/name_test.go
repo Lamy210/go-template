@@ -32,6 +32,8 @@ func TestValidate(t *testing.T) {
 		"app\fworker",
 		"app\rworker",
 		"app\nworker",
+		string([]byte{0xff}),
+		"worker-" + string([]byte{0xc3, 0x28}),
 		strings.Repeat("a", maxNameBytes+1),
 		strings.Repeat("界", 86), // 258 UTF-8 bytes.
 	}
