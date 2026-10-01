@@ -286,6 +286,44 @@ func TestValidateRejectsEmptyServiceName(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidUTF8ProcessIdentity(t *testing.T) {
+	t.Parallel()
+
+	base, err := load(func(string) (string, bool) { return "", false })
+	if err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{
+			name: "service name",
+			mutate: func(cfg *Config) {
+				cfg.ServiceName = "service-" + string([]byte{0xff})
+			},
+		},
+		{
+			name: "environment",
+			mutate: func(cfg *Config) {
+				cfg.Environment = "prod-" + string([]byte{0xc3, 0x28})
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := base
+			tt.mutate(&cfg)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want invalid UTF-8 identity error")
+			}
+		})
+	}
+}
+
 func TestValidateRejectsUnsafeLimits(t *testing.T) {
 	t.Parallel()
 
