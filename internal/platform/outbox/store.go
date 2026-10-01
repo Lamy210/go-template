@@ -11,11 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	errNilDBTX            = errors.New("outbox DBTX must not be nil")
-	errTraceparentTooLong = errors.New("outbox traceparent exceeds storage limit")
-	errTracestateTooLong  = errors.New("outbox tracestate exceeds storage limit")
-)
+var errNilDBTX = errors.New("outbox DBTX must not be nil")
 
 const claimSQL = `
 WITH candidates AS (
