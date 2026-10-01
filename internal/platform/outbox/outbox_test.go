@@ -158,12 +158,35 @@ func TestEventValidateBounds(t *testing.T) {
 		{ID: string([]byte{0xff}), Subject: "subject"},
 		{ID: "event-" + string([]byte{0xc3, 0x28}), Subject: "subject"},
 		{ID: "id", Subject: ""},
+		{ID: "id", Subject: string([]byte{0xff})},
+		{ID: "id", Subject: "subject." + string([]byte{0xc3, 0x28})},
 		{ID: "id", Subject: "subject", Payload: make([]byte, maxPayloadBytes+1)},
 	}
 	for _, event := range tests {
 		if err := event.Validate(); err == nil {
 			t.Fatalf("Validate(%+v) error = nil, want error", event)
 		}
+	}
+}
+
+func TestEnqueueRejectsInvalidUTF8SubjectBeforeDatabaseUse(t *testing.T) {
+	t.Parallel()
+
+	db := &enqueueDBTX{}
+	err := Enqueue(
+		context.Background(),
+		db,
+		Event{
+			ID:      "event-1",
+			Subject: "events." + string([]byte{0xff}),
+		},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("Enqueue() error = nil, want invalid subject error")
+	}
+	if len(db.args) != 0 {
+		t.Fatalf("database Exec called with %d arguments", len(db.args))
 	}
 }
 

@@ -36,7 +36,7 @@ The outbox helper never starts a transaction implicitly.
 Each event stores:
 
 - stable application-supplied `event_id`;
-- subject;
+- subject, stored as bounded valid UTF-8 text;
 - payload up to 1 MiB; a nil Go byte slice is normalized to an explicit
   zero-byte payload rather than SQL NULL;
 - `traceparent` and `tracestate`;
@@ -50,6 +50,11 @@ must be canonical valid UTF-8 text with no invalid UTF-8 byte sequences,
 leading/trailing ASCII whitespace, or CR/LF characters. This keeps the durable
 application ID on the same stable text contract used by the default NATS
 dispatcher when it becomes `Nats-Msg-Id`.
+
+The durable subject must contain 1-255 bytes and be valid UTF-8 before
+PostgreSQL is touched. The outbox deliberately does not validate NATS wildcard
+or token grammar: it remains transport-neutral, and a configured publisher owns
+transport-specific subject validation.
 
 ## Propagation metadata
 

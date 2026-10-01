@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/messageid"
@@ -68,6 +69,9 @@ func (e Event) Validate() error {
 	}
 	if strings.TrimSpace(e.Subject) == "" || len(e.Subject) > maxSubjectBytes {
 		return fmt.Errorf("outbox subject must contain 1-%d bytes", maxSubjectBytes)
+	}
+	if !utf8.ValidString(e.Subject) {
+		return errors.New("outbox subject must be valid UTF-8")
 	}
 	if len(e.Payload) > maxPayloadBytes {
 		return fmt.Errorf("outbox payload must not exceed %d bytes", maxPayloadBytes)
