@@ -71,7 +71,9 @@ publish span and injects a fresh message propagation context.
 Propagation is observability metadata, not durable business state. Panics from
 an injected propagation hook are contained at the outbox boundary: enqueue
 continues without partially written trace metadata, and dispatch falls back to
-the original context instead of failing the durable event.
+the original context instead of failing the durable event. Restored propagation
+may add trace values, but the dispatcher context remains authoritative for
+deadline, cancellation, and cancellation cause.
 
 Persistence applies the same fail-open policy to unsafe propagation text.
 Oversized, invalid-UTF-8, or NUL-containing `traceparent` is dropped together
