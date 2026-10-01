@@ -238,6 +238,48 @@ func TestStartOperationSafelyPreservesCallerCancellationAndValues(t *testing.T) 
 	}
 }
 
+func TestStartOperationSafelyPreservesBusinessCancellationCause(t *testing.T) {
+	t.Parallel()
+
+	businessCause := errors.New("business canceled")
+	tracerCause := errors.New("tracer canceled")
+
+	businessCtx, cancelBusiness := context.WithCancelCause(context.Background())
+	tracerCtx, cancelTracer := context.WithCancelCause(
+		context.WithValue(
+			context.Background(),
+			observabilityContextKey{},
+			"traced",
+		),
+	)
+	cancelTracer(tracerCause)
+
+	gotCtx, end := startOperationSafely(
+		businessCtx,
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return tracerCtx, nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "traced" {
+		t.Fatalf("operation observability value = %q, want traced", value)
+	}
+	cancelBusiness(businessCause)
+
+	if !errors.Is(gotCtx.Err(), context.Canceled) {
+		t.Fatalf("operation context error = %v, want context.Canceled", gotCtx.Err())
+	}
+	cause := context.Cause(gotCtx)
+	if !errors.Is(cause, businessCause) {
+		t.Fatalf("operation cancellation cause = %v, want business cause", cause)
+	}
+	if errors.Is(cause, tracerCause) {
+		t.Fatalf("operation cancellation cause leaked tracer cause: %v", cause)
+	}
+}
+
 func TestStartOperationSafelyIgnoresTracerCancellation(t *testing.T) {
 	t.Parallel()
 
