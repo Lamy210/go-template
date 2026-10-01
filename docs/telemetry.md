@@ -153,7 +153,11 @@ Normal shutdown is ordered:
 Telemetry shutdown is bounded by `TELEMETRY_SHUTDOWN_TIMEOUT`. Trace and
 metric providers receive that same budget concurrently, so one signal cannot
 consume the entire deadline before the other starts. Force-flush follows the
-same concurrent lifecycle rule.
+same concurrent lifecycle rule. The lifecycle coordinator also stops waiting
+when the caller context expires even if an injected SDK callback incorrectly
+ignores cancellation. Go cannot forcibly terminate such a callback; it may
+finish later in its isolated goroutine, but process shutdown is no longer held
+past the configured wait budget.
 
 Lifecycle failures retain the underlying SDK cause for `errors.Is/errors.As`
 but expose only stable operation names through normal error formatting. This
