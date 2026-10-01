@@ -21,7 +21,7 @@ func Validate(id string) error {
 	if id == "" || !utf8.ValidString(id) {
 		return errInvalid
 	}
-	if textproto.TrimString(id) != id || strings.ContainsAny(id, "\r\n") {
+	if textproto.TrimString(id) != id || strings.ContainsAny(id, "\x00\r\n") {
 		return errInvalid
 	}
 	return nil
