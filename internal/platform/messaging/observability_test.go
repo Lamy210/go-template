@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
@@ -58,6 +59,14 @@ func (panickingStartTracer) StartProcess(
 	string,
 ) (context.Context, func(error)) {
 	panic("sensitive process tracer panic")
+}
+
+type panickingValueContext struct {
+	context.Context
+}
+
+func (panickingValueContext) Value(any) any {
+	panic("sensitive tracer context value panic")
 }
 
 type panickingFinishTracer struct{}
@@ -162,6 +171,104 @@ func TestStartOperationSafelyContainsStartPanic(t *testing.T) {
 			}
 			end(errors.New("ignored by no-op finish"))
 		})
+	}
+}
+
+func TestStartOperationSafelyContainsTracerContextValuePanic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(
+		context.Background(),
+		observabilityContextKey{},
+		"business",
+	)
+	gotCtx, end := startOperationSafely(
+		ctx,
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return panickingValueContext{Context: context.Background()}, nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "business" {
+		t.Fatalf("operation context fallback value = %q, want business", value)
+	}
+}
+
+func TestStartOperationSafelyPreservesCallerCancellationAndValues(t *testing.T) {
+	t.Parallel()
+
+	type businessContextKey struct{}
+	base := context.WithValue(
+		context.Background(),
+		businessContextKey{},
+		"business",
+	)
+	ctx, cancel := context.WithCancel(base)
+
+	gotCtx, end := startOperationSafely(
+		ctx,
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return context.WithValue(
+				context.Background(),
+				observabilityContextKey{},
+				"traced",
+			), nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "traced" {
+		t.Fatalf("operation observability value = %q, want traced", value)
+	}
+	if value, _ := gotCtx.Value(businessContextKey{}).(string); value != "business" {
+		t.Fatalf("operation business value = %q, want business", value)
+	}
+
+	cancel()
+	select {
+	case <-gotCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("operation context did not preserve caller cancellation")
+	}
+	if !errors.Is(gotCtx.Err(), context.Canceled) {
+		t.Fatalf("operation context error = %v, want context.Canceled", gotCtx.Err())
+	}
+}
+
+func TestStartOperationSafelyIgnoresTracerCancellation(t *testing.T) {
+	t.Parallel()
+
+	tracerCtx, cancelTracer := context.WithCancel(
+		context.WithValue(
+			context.Background(),
+			observabilityContextKey{},
+			"traced",
+		),
+	)
+	cancelTracer()
+
+	gotCtx, end := startOperationSafely(
+		context.Background(),
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return tracerCtx, nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "traced" {
+		t.Fatalf("operation observability value = %q, want traced", value)
+	}
+	if err := gotCtx.Err(); err != nil {
+		t.Fatalf("operation context inherited tracer cancellation: %v", err)
+	}
+	select {
+	case <-gotCtx.Done():
+		t.Fatal("operation context Done closed from tracer cancellation")
+	default:
 	}
 }
 
