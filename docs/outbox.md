@@ -46,9 +46,10 @@ Each event stores:
 - published/failed timestamps.
 
 `event_id` is unique and becomes the external message deduplication ID. It
-must be canonical text with no leading/trailing ASCII whitespace or CR/LF
-characters. This guarantees the durable application ID is not normalized when
-the default NATS dispatcher serializes it as `Nats-Msg-Id`.
+must be canonical valid UTF-8 text with no invalid UTF-8 byte sequences,
+leading/trailing ASCII whitespace, or CR/LF characters. This keeps the durable
+application ID on the same stable text contract used by the default NATS
+dispatcher when it becomes `Nats-Msg-Id`.
 
 ## Propagation metadata
 
