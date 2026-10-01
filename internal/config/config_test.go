@@ -326,6 +326,18 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "non-printable stream name",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Stream = "APP\x00EVENTS"
+			},
+		},
+		{
+			name: "Unicode whitespace stream name",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Stream = "APP\u00a0EVENTS"
+			},
+		},
+		{
 			name: "invalid durable name",
 			mutate: func(cfg *NATSConfig) {
 				cfg.Durable = "app worker"
@@ -335,6 +347,12 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			name: "invalid UTF-8 durable name",
 			mutate: func(cfg *NATSConfig) {
 				cfg.Durable = string([]byte{0xff})
+			},
+		},
+		{
+			name: "non-printable durable name",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Durable = "worker\vname"
 			},
 		},
 		{
