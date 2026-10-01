@@ -4,6 +4,7 @@ package natsname
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 const maxNameBytes = 255
@@ -16,6 +17,7 @@ var errInvalidName = errors.New("invalid NATS JetStream name")
 // carriage returns, or newlines.
 func Validate(name string) error {
 	if name == "" ||
+		!utf8.ValidString(name) ||
 		len(name) > maxNameBytes ||
 		strings.ContainsAny(name, ">*. /\\\t\f\r\n") {
 		return errInvalidName
