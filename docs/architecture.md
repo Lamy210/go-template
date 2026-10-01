@@ -133,7 +133,7 @@ Messaging observability hooks follow the same availability policy as HTTP
 observability hooks: they fail open. Propagator/tracer panics are contained,
 their panic values are discarded, and the broker/handler/settlement path
 continues. Tracer-returned context values are visible to propagation and spans,
-but caller deadlines and cancellation remain business-owned. Propagation
+but caller deadlines, cancellation, and cancellation cause remain business-owned. Propagation
 injection is staged so a failed hook cannot partially mutate outbound NATS
 headers. If propagation metadata alone causes publish-size
 preflight to fail, only those staged observability headers are rolled back while

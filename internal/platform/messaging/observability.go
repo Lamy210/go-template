@@ -73,7 +73,10 @@ func startOperationSafely(
 	if startedCtx != nil {
 		operationCtx = operationValueContext{
 			Context: ctx,
-			values:  startedCtx,
+			// Keep tracer-added values, but strip its cancellation/deadline
+			// internals so context.Cause and other context machinery continue
+			// to observe the business context as authoritative.
+			values: context.WithoutCancel(startedCtx),
 		}
 	}
 	if finish != nil {
