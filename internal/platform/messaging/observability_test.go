@@ -165,6 +165,82 @@ func TestStartOperationSafelyContainsStartPanic(t *testing.T) {
 	}
 }
 
+func TestStartOperationSafelyPreservesCallerCancellationAndValues(t *testing.T) {
+	t.Parallel()
+
+	type businessContextKey struct{}
+	base := context.WithValue(
+		context.Background(),
+		businessContextKey{},
+		"business",
+	)
+	ctx, cancel := context.WithCancel(base)
+
+	gotCtx, end := startOperationSafely(
+		ctx,
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return context.WithValue(
+				context.Background(),
+				observabilityContextKey{},
+				"traced",
+			), nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "traced" {
+		t.Fatalf("operation observability value = %q, want traced", value)
+	}
+	if value, _ := gotCtx.Value(businessContextKey{}).(string); value != "business" {
+		t.Fatalf("operation business value = %q, want business", value)
+	}
+
+	cancel()
+	select {
+	case <-gotCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("operation context did not preserve caller cancellation")
+	}
+	if !errors.Is(gotCtx.Err(), context.Canceled) {
+		t.Fatalf("operation context error = %v, want context.Canceled", gotCtx.Err())
+	}
+}
+
+func TestStartOperationSafelyIgnoresTracerCancellation(t *testing.T) {
+	t.Parallel()
+
+	tracerCtx, cancelTracer := context.WithCancel(
+		context.WithValue(
+			context.Background(),
+			observabilityContextKey{},
+			"traced",
+		),
+	)
+	cancelTracer()
+
+	gotCtx, end := startOperationSafely(
+		context.Background(),
+		"events.created",
+		func(context.Context, string) (context.Context, func(error)) {
+			return tracerCtx, nil
+		},
+	)
+	defer end(nil)
+
+	if value, _ := gotCtx.Value(observabilityContextKey{}).(string); value != "traced" {
+		t.Fatalf("operation observability value = %q, want traced", value)
+	}
+	if err := gotCtx.Err(); err != nil {
+		t.Fatalf("operation context inherited tracer cancellation: %v", err)
+	}
+	select {
+	case <-gotCtx.Done():
+		t.Fatal("operation context Done closed from tracer cancellation")
+	default:
+	}
+}
+
 func TestStartOperationSafelyContainsFinishPanic(t *testing.T) {
 	t.Parallel()
 
