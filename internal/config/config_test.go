@@ -471,6 +471,12 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "duplicate stream subject",
+			mutate: func(cfg *NATSConfig) {
+				cfg.Subjects = []string{"app.events.>", "app.events.>"}
+			},
+		},
+		{
 			name: "invalid UTF-8 filter subject",
 			mutate: func(cfg *NATSConfig) {
 				cfg.FilterSubject = "app.events." + string([]byte{0xff})
