@@ -55,6 +55,30 @@ func TestValidateLiteralRejectsWildcards(t *testing.T) {
 	}
 }
 
+func TestHasDuplicatePatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		patterns []string
+		want     bool
+	}{
+		{name: "empty", patterns: nil, want: false},
+		{name: "single", patterns: []string{"events.>"}, want: false},
+		{name: "distinct overlap", patterns: []string{"events.*", "events.>"}, want: false},
+		{name: "case distinct", patterns: []string{"events.>", "EVENTS.>"}, want: false},
+		{name: "exact duplicate", patterns: []string{"events.>", "jobs.>", "events.>"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := HasDuplicatePatterns(tt.patterns); got != tt.want {
+				t.Fatalf("HasDuplicatePatterns(%v) = %t, want %t", tt.patterns, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPatternContainsPattern(t *testing.T) {
 	t.Parallel()
 
