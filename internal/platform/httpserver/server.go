@@ -91,6 +91,9 @@ func New(
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if err := info.Validate(); err != nil {
+		return nil, err
+	}
 	if logger == nil {
 		return nil, errors.New("http logger must not be nil")
 	}
