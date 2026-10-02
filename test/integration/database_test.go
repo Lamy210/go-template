@@ -85,6 +85,49 @@ func TestTransactionCallbackPanicRollsBack(t *testing.T) {
 	}
 }
 
+func TestOutboxTextConstraintsUseByteLength(t *testing.T) {
+	pool, ctx := openTestPool(t)
+
+	tests := []struct {
+		name  string
+		query string
+		args  []any
+	}{
+		{
+			name: "event ID",
+			query: `INSERT INTO outbox_events (event_id, subject, payload)
+				VALUES ($1, 'events.test', ''::bytea)`,
+			args: []any{strings.Repeat("雪", 43)}, // 129 UTF-8 bytes, 43 characters.
+		},
+		{
+			name: "subject",
+			query: `INSERT INTO outbox_events (event_id, subject, payload)
+				VALUES ('byte-subject', $1, ''::bytea)`,
+			args: []any{strings.Repeat("雪", 86)}, // 258 UTF-8 bytes, 86 characters.
+		},
+		{
+			name: "traceparent",
+			query: `INSERT INTO outbox_events (event_id, subject, payload, traceparent)
+				VALUES ('byte-traceparent', 'events.test', ''::bytea, $1)`,
+			args: []any{strings.Repeat("雪", 86)}, // 258 UTF-8 bytes, 86 characters.
+		},
+		{
+			name: "tracestate",
+			query: `INSERT INTO outbox_events (event_id, subject, payload, tracestate)
+				VALUES ('byte-tracestate', 'events.test', ''::bytea, $1)`,
+			args: []any{strings.Repeat("雪", 171)}, // 513 UTF-8 bytes, 171 characters.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := pool.Exec(ctx, tt.query, tt.args...); err == nil {
+				t.Fatalf("insert with oversized %s succeeded", tt.name)
+			}
+		})
+	}
+}
+
 func TestDatabaseCloseHonorsDeadlineWithAcquiredConnection(t *testing.T) {
 	pool, ctx := openTestPool(t)
 

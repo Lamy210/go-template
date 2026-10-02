@@ -56,6 +56,11 @@ NUL before PostgreSQL is touched. The outbox deliberately does not validate NATS
 or token grammar: it remains transport-neutral, and a configured publisher owns
 transport-specific subject validation.
 
+PostgreSQL CHECK constraints use `octet_length` for the same event-ID, subject,
+`traceparent`, and `tracestate` byte ceilings enforced by Go. Direct SQL,
+legacy writers, or custom persistence code therefore cannot bypass the durable
+byte contract merely by using multibyte UTF-8 characters.
+
 ## Propagation metadata
 
 Only W3C `traceparent` and `tracestate` are persisted.
