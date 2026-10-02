@@ -84,6 +84,23 @@ func (t *testTracer) StartProcess(
 	}
 }
 
+type collidingHeaderIntegrationPropagator struct{}
+
+func (collidingHeaderIntegrationPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set(testCorrelationHeader, "must-be-dropped")
+	carrier.Set(jetstream.MsgIDHeader, "observability-overwrite")
+}
+
+func (collidingHeaderIntegrationPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type invalidHeaderIntegrationPropagator struct{}
 
 func (invalidHeaderIntegrationPropagator) Inject(
@@ -412,6 +429,87 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 		if tracer.processStarted.Load() == 0 || tracer.processEnded.Load() == 0 {
 			t.Fatal("process tracer lifecycle was not invoked")
+		}
+	})
+
+	t.Run("propagation cannot overwrite message identity", func(t *testing.T) {
+		const subject = "template.events.propagation-header-collision"
+
+		hookClient, err := messaging.Open(
+			messaging.ClientConfig{
+				URL:            natsURL,
+				Name:           "go-template-propagation-header-collision",
+				ConnectTimeout: 2 * time.Second,
+				ReconnectWait:  100 * time.Millisecond,
+				MaxReconnects:  5,
+				DrainTimeout:   3 * time.Second,
+				RequestTimeout: 2 * time.Second,
+			},
+			messaging.WithPropagator(collidingHeaderIntegrationPropagator{}),
+		)
+		if err != nil {
+			t.Fatalf("open header-collision nats client: %v", err)
+		}
+		t.Cleanup(func() {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := hookClient.Drain(drainCtx); err != nil {
+				t.Errorf("drain header-collision nats client: %v", err)
+			}
+		})
+
+		rawConn, err := nats.Connect(natsURL)
+		if err != nil {
+			t.Fatalf("open header-collision subscriber: %v", err)
+		}
+		t.Cleanup(rawConn.Close)
+		sub, err := rawConn.SubscribeSync(subject)
+		if err != nil {
+			t.Fatalf("subscribe header-collision subject: %v", err)
+		}
+		if err := rawConn.Flush(); err != nil {
+			t.Fatalf("flush header-collision subscription: %v", err)
+		}
+
+		first, err := hookClient.Publish(ctx, subject, "business-id-1", []byte("first"))
+		if err != nil {
+			t.Fatalf("first header-collision publish: %v", err)
+		}
+		second, err := hookClient.Publish(ctx, subject, "business-id-2", []byte("second"))
+		if err != nil {
+			t.Fatalf("second header-collision publish: %v", err)
+		}
+		if first.Duplicate || second.Duplicate {
+			t.Fatalf(
+				"distinct business IDs were deduplicated: first=%t second=%t",
+				first.Duplicate,
+				second.Duplicate,
+			)
+		}
+		if first.Sequence == second.Sequence {
+			t.Fatalf("distinct business IDs share sequence %d", first.Sequence)
+		}
+
+		for _, want := range []struct {
+			id      string
+			payload string
+		}{
+			{id: "business-id-1", payload: "first"},
+			{id: "business-id-2", payload: "second"},
+		} {
+			received, err := sub.NextMsg(5 * time.Second)
+			if err != nil {
+				t.Fatalf("receive header-collision message: %v", err)
+			}
+			if got := received.Header.Get(jetstream.MsgIDHeader); got != want.id {
+				t.Fatalf("message ID = %q, want %q", got, want.id)
+			}
+			if got := received.Header.Get(testCorrelationHeader); got != "" {
+				t.Fatalf("staged propagation header = %q, want dropped", got)
+			}
+			if got := string(received.Data); got != want.payload {
+				t.Fatalf("payload = %q, want %q", got, want.payload)
+			}
 		}
 	})
 
