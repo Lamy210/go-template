@@ -226,15 +226,33 @@ func TestLoadRejectsNATSAckBudgetWithoutSettlementSlack(t *testing.T) {
 	_, err := load(func(key string) (string, bool) {
 		values := map[string]string{
 			"NATS_ENABLED":         "true",
-			"NATS_ACK_WAIT":        "5s",
+			"NATS_ACK_WAIT":        "6s",
 			"NATS_HANDLER_TIMEOUT": "4s",
+			"NATS_REQUEST_TIMEOUT": "1s",
 			"NATS_ACK_TIMEOUT":     "1s",
 		}
 		value, ok := values[key]
 		return value, ok
 	})
 	if err == nil || !strings.Contains(err.Error(), "NATS_ACK_WAIT") {
-		t.Fatalf("load error = %v, want NATS_ACK_WAIT budget validation error", err)
+		t.Fatalf("load error = %v, want full NATS_ACK_WAIT budget validation error", err)
+	}
+}
+
+func TestLoadEnabledNATSDefaultsHaveSettlementSlack(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := load(func(key string) (string, bool) {
+		if key == "NATS_ENABLED" {
+			return "true", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("load enabled NATS defaults: %v", err)
+	}
+	if cfg.NATS.AckWait != 45*time.Second {
+		t.Fatalf("NATS AckWait = %s, want 45s", cfg.NATS.AckWait)
 	}
 }
 
