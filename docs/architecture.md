@@ -67,6 +67,11 @@ profiles cannot change the process identity by normalizing malformed text
 differently.
 
 Request correlation is also treated as an HTTP trust boundary. Client-supplied
+HTTP-visible service/build metadata is validated again at the transport
+constructor boundary. Service, version, commit, and build-time values must be
+non-empty valid UTF-8 before the `/version` JSON route is registered, so direct
+adapter use cannot rely on JSON replacement of malformed text.
+
 `X-Request-Id` values are accepted only when they are bounded visible ASCII.
 Oversized or malformed values are discarded and the HTTP adapter generates a
 cryptographically random request ID for logs and error responses. Generated
