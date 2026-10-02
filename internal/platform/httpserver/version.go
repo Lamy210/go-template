@@ -31,10 +31,10 @@ func (i ServiceInfo) Validate() error {
 		{name: "build time", value: i.BuildTime},
 	} {
 		if strings.TrimSpace(field.value) == "" {
-			return errors.New("http service " + field.name + " must not be empty")
+			return errors.New("http service metadata " + field.name + " must not be empty")
 		}
 		if !utf8.ValidString(field.value) {
-			return errors.New("http service " + field.name + " must be valid UTF-8")
+			return errors.New("http service metadata " + field.name + " must be valid UTF-8")
 		}
 	}
 	return nil
