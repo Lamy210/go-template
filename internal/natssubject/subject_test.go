@@ -55,6 +55,44 @@ func TestValidateLiteralRejectsWildcards(t *testing.T) {
 	}
 }
 
+func TestPatternContainsPattern(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		container string
+		candidate string
+		want      bool
+	}{
+		{name: "global tail contains literal", container: ">", candidate: "events.work", want: true},
+		{name: "global tail contains single wildcard", container: ">", candidate: "*", want: true},
+		{name: "tail contains narrower wildcard", container: "events.>", candidate: "events.*", want: true},
+		{name: "tail contains deeper tail", container: "events.>", candidate: "events.work.>", want: true},
+		{name: "single wildcard contains literal", container: "events.*", candidate: "events.work", want: true},
+		{name: "matching wildcards", container: "events.*", candidate: "events.*", want: true},
+		{name: "tail requires at least one token", container: "events.>", candidate: "events", want: false},
+		{name: "fixed pattern cannot contain tail", container: "events.*", candidate: "events.>", want: false},
+		{name: "literal cannot contain wildcard", container: "events.work", candidate: "events.*", want: false},
+		{name: "narrow tail cannot contain wider prefix", container: "events.work.>", candidate: "events.*.>", want: false},
+		{name: "longer minimum cannot contain shorter pattern", container: "events.*.>", candidate: "events.*", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := PatternContainsPattern(tt.container, tt.candidate); got != tt.want {
+				t.Fatalf(
+					"PatternContainsPattern(%q, %q) = %t, want %t",
+					tt.container,
+					tt.candidate,
+					got,
+					tt.want,
+				)
+			}
+		})
+	}
+}
+
 func TestPatternMatchesLiteral(t *testing.T) {
 	t.Parallel()
 
