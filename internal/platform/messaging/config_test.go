@@ -141,7 +141,7 @@ func TestConsumerConfigRejectsUnboundedDelivery(t *testing.T) {
 	}
 }
 
-func TestConsumerConfigRejectsAckWaitWithoutSettlementSlack(t *testing.T) {
+func TestConsumerConfigRejectsAckWaitWithoutHandlerAckSlack(t *testing.T) {
 	t.Parallel()
 
 	cfg := ConsumerConfig{
