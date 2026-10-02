@@ -338,6 +338,19 @@ func TestValidateRejectsUnsafeLimits(t *testing.T) {
 	}
 }
 
+func TestNATSValidateAllowsMaxProcessAttemptsWithSingleQuarantineAttempt(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultNATSConfig()
+	cfg.Enabled = true
+	cfg.ProcessAttempts = math.MaxInt
+	cfg.QuarantineAttempts = 1
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want effective MaxDeliver to fit int", err)
+	}
+}
+
 func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 	t.Parallel()
 
