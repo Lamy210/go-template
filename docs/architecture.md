@@ -135,8 +135,10 @@ their panic values are discarded, and the broker/handler/settlement path
 continues. Tracer-returned and extracted propagation values are visible to
 propagation and spans, but caller deadlines, cancellation, and cancellation cause
 remain business-owned. Propagation injection is staged so a failed hook cannot
-partially mutate outbound NATS headers. If propagation metadata alone causes publish-size
-preflight to fail, only those staged observability headers are rolled back while
+partially mutate outbound NATS headers. A staged set containing a NATS-invalid
+header key is discarded rather than allowed to fail the business publish. If
+propagation metadata alone causes publish-size preflight to fail, only those
+staged observability headers are rolled back while
 business headers, message ID, and payload remain authoritative.
 
 See [messaging.md](messaging.md).
