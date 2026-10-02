@@ -1054,7 +1054,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 				DeliverPolicy: jetstream.DeliverAllPolicy,
 				AckPolicy:     jetstream.AckExplicitPolicy,
 				AckWait:       cfg.AckWait,
-				MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts,
+				MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts - 1,
 				FilterSubject: cfg.FilterSubject,
 				ReplayPolicy:  jetstream.ReplayInstantPolicy,
 				MaxAckPending: cfg.MaxAckPending,
