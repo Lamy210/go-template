@@ -137,6 +137,11 @@ func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header
 			// otherwise valid business message fail NATS header serialization.
 			return
 		}
+		if natsControlHeaderKey(key) {
+			// Nats-* headers can control JetStream publish semantics. Optional
+			// observability propagation never owns that transport namespace.
+			return
+		}
 		if target.Has(key) {
 			// Existing message headers are business/transport state. Never let
 			// optional propagation overwrite message identity or quarantine
