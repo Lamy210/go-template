@@ -19,7 +19,6 @@ func TestCurrentReturnsDefaults(t *testing.T) {
 	}
 }
 
-
 func TestInfoValidateRejectsInvalidIdentityText(t *testing.T) {
 	t.Parallel()
 
