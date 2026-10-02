@@ -171,8 +171,10 @@ cannot replace the caller's deadline, cancellation lifetime, or cancellation
 cause. Propagation injection is staged in a temporary header map so a panicking
 hook cannot leave partially written trace headers on an outbound message. The
 staged set is also discarded as a whole if a propagator emits a NATS ADR-4
-invalid header key, so malformed observability metadata cannot turn a valid
-business publish into a header-serialization failure.
+invalid header key or collides with an existing message header. This keeps
+business/transport headers such as `Nats-Msg-Id` authoritative and prevents
+malformed or conflicting observability metadata from changing publish
+semantics.
 
 Publish-size preflight follows the same fail-open policy. The business headers,
 stable `Nats-Msg-Id`, and payload are checked first. Only a business message
@@ -250,6 +252,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - header-aware publish-size preflight against managed stream limits;
 - fail-open propagation rollback when observability headers alone exceed a publish limit;
 - fail-open discard of propagation sets containing ADR-4-invalid NATS header keys;
+- preservation of business message identity when propagation emits colliding headers;
 - publish-to-handler context propagation through real NATS headers;
 - publish/process tracer lifecycle and operation-context propagation;
 - panic containment followed by bounded retry without crashing the consumer;
