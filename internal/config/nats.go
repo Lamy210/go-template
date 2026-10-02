@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsbudget"
 	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 )
@@ -29,7 +30,7 @@ const (
 	defaultNATSDurable            = "app-worker"
 	defaultNATSFilterSubject      = "app.events.work"
 	defaultNATSQuarantineSubject  = "app.events.quarantine"
-	defaultNATSAckWait            = 40 * time.Second
+	defaultNATSAckWait            = 45 * time.Second
 	defaultNATSProcessAttempts    = 3
 	defaultNATSQuarantineAttempts = 2
 	defaultNATSMaxAckPending      = 128
@@ -285,9 +286,15 @@ func (c NATSConfig) Validate() error {
 	if c.PullExpiry < time.Second {
 		return fmt.Errorf("NATS_PULL_EXPIRY must be at least one second")
 	}
-	if c.HandlerTimeout >= c.AckWait ||
-		c.AckTimeout >= c.AckWait-c.HandlerTimeout {
-		return fmt.Errorf("NATS_ACK_WAIT must exceed NATS_HANDLER_TIMEOUT + NATS_ACK_TIMEOUT")
+	if !natsbudget.AckWaitCoversSettlement(
+		c.AckWait,
+		c.HandlerTimeout,
+		c.RequestTimeout,
+		c.AckTimeout,
+	) {
+		return fmt.Errorf(
+			"NATS_ACK_WAIT must exceed NATS_HANDLER_TIMEOUT + NATS_REQUEST_TIMEOUT + NATS_ACK_TIMEOUT",
+		)
 	}
 	return nil
 }

@@ -865,7 +865,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			cfg := workerConfig(stream, "deadline-worker", subject)
 			cfg.HandlerTimeout = 100 * time.Millisecond
 			cfg.AckTimeout = 100 * time.Millisecond
-			cfg.AckWait = time.Second
+			cfg.AckWait = 3 * time.Second
 			cfg.RetryDelay = 50 * time.Millisecond
 			errCh <- client.RunConsumer(
 				consumerCtx,
@@ -1203,7 +1203,7 @@ func workerConfig(stream messaging.StreamConfig, durable, filter string) messagi
 		Durable:            durable,
 		FilterSubject:      filter,
 		QuarantineSubject:  "template.events.quarantine",
-		AckWait:            3 * time.Second,
+		AckWait:            5 * time.Second,
 		ProcessAttempts:    2,
 		QuarantineAttempts: 2,
 		MaxAckPending:      8,

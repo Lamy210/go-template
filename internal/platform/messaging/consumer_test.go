@@ -68,6 +68,24 @@ func TestInvokeHandlerTreatsExpiredContextAsFailure(t *testing.T) {
 	}
 }
 
+func TestValidateConsumerSettlementBudgetIncludesPublishTimeout(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.AckWait = 4 * time.Second
+	cfg.HandlerTimeout = time.Second
+	cfg.AckTimeout = time.Second
+
+	if err := validateConsumerSettlementBudget(cfg, 2*time.Second); err == nil {
+		t.Fatal("exact handler+publish+ack budget must not be accepted")
+	}
+
+	cfg.AckWait += time.Nanosecond
+	if err := validateConsumerSettlementBudget(cfg, 2*time.Second); err != nil {
+		t.Fatalf("settlement budget with strict slack error = %v", err)
+	}
+}
+
 func TestDeliveryAttemptLimitsCountFinalProcessingDeliveryAsFirstQuarantineAttempt(t *testing.T) {
 	t.Parallel()
 
