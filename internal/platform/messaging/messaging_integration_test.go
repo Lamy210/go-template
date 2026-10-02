@@ -118,6 +118,23 @@ func (collidingHeaderIntegrationPropagator) Extract(
 	return ctx
 }
 
+type unstableHeaderValueIntegrationPropagator struct{}
+
+func (unstableHeaderValueIntegrationPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set(testCorrelationHeader, "must-be-dropped")
+	carrier.Set("X-Test-Unstable", "line1\nline2")
+}
+
+func (unstableHeaderValueIntegrationPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type invalidHeaderIntegrationPropagator struct{}
 
 func (invalidHeaderIntegrationPropagator) Inject(
@@ -593,6 +610,68 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			if got := string(received.Data); got != want.payload {
 				t.Fatalf("payload = %q, want %q", got, want.payload)
 			}
+		}
+	})
+
+	t.Run("mutable propagation value does not alter business publish", func(t *testing.T) {
+		const subject = "template.events.mutable-propagation-value"
+		const msgID = "mutable-propagation-value-1"
+
+		hookClient, err := messaging.Open(
+			messaging.ClientConfig{
+				URL:            natsURL,
+				Name:           "go-template-mutable-propagation-value",
+				ConnectTimeout: 2 * time.Second,
+				ReconnectWait:  100 * time.Millisecond,
+				MaxReconnects:  5,
+				DrainTimeout:   3 * time.Second,
+				RequestTimeout: 2 * time.Second,
+			},
+			messaging.WithPropagator(unstableHeaderValueIntegrationPropagator{}),
+		)
+		if err != nil {
+			t.Fatalf("open mutable-value nats client: %v", err)
+		}
+		t.Cleanup(func() {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := hookClient.Drain(drainCtx); err != nil {
+				t.Errorf("drain mutable-value nats client: %v", err)
+			}
+		})
+
+		rawConn, err := nats.Connect(natsURL)
+		if err != nil {
+			t.Fatalf("open mutable-value subscriber: %v", err)
+		}
+		t.Cleanup(rawConn.Close)
+		sub, err := rawConn.SubscribeSync(subject)
+		if err != nil {
+			t.Fatalf("subscribe mutable-value subject: %v", err)
+		}
+		if err := rawConn.Flush(); err != nil {
+			t.Fatalf("flush mutable-value subscription: %v", err)
+		}
+
+		if _, err := hookClient.Publish(ctx, subject, msgID, []byte("business")); err != nil {
+			t.Fatalf("publish with mutable propagation value: %v", err)
+		}
+
+		received, err := sub.NextMsg(5 * time.Second)
+		if err != nil {
+			t.Fatalf("receive mutable-value message: %v", err)
+		}
+		if got := received.Header.Get(testCorrelationHeader); got != "" {
+			t.Fatalf("stable staged propagation header = %q, want dropped", got)
+		}
+		if got := received.Header.Get("X-Test-Unstable"); got != "" {
+			t.Fatalf("mutable staged propagation header = %q, want dropped", got)
+		}
+		if got := received.Header.Get(jetstream.MsgIDHeader); got != msgID {
+			t.Fatalf("message ID = %q, want %q", got, msgID)
+		}
+		if got := string(received.Data); got != "business" {
+			t.Fatalf("payload = %q, want business", got)
 		}
 	})
 

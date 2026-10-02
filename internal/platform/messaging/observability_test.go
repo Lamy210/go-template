@@ -79,6 +79,23 @@ func (collidingHeaderPropagator) Extract(
 	return ctx
 }
 
+type unstableHeaderValuePropagator struct{}
+
+func (unstableHeaderValuePropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set("traceparent", "must-be-dropped")
+	carrier.Set("baggage", "tenant=example\nregion=test")
+}
+
+func (unstableHeaderValuePropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type invalidHeaderKeyPropagator struct{}
 
 func (invalidHeaderKeyPropagator) Inject(
@@ -182,6 +199,32 @@ func TestValidNATSHeaderKey(t *testing.T) {
 	}
 }
 
+func TestStableNATSHeaderValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{value: "", want: true},
+		{value: "traceparent-value", want: true},
+		{value: "日本語", want: true},
+		{value: "middle\tseparator", want: true},
+		{value: " leading", want: false},
+		{value: "trailing ", want: false},
+		{value: "\tleading", want: false},
+		{value: "trailing\t", want: false},
+		{value: "line1\nline2", want: false},
+		{value: "line1\rline2", want: false},
+		{value: string([]byte{0xff}), want: false},
+	}
+	for _, tt := range tests {
+		if got := stableNATSHeaderValue(tt.value); got != tt.want {
+			t.Fatalf("stableNATSHeaderValue(%q) = %t, want %t", tt.value, got, tt.want)
+		}
+	}
+}
+
 func TestNATSControlHeaderKey(t *testing.T) {
 	t.Parallel()
 
@@ -257,6 +300,26 @@ func TestInjectPropagationSafelyDoesNotOverwriteBusinessHeaders(t *testing.T) {
 	}
 	if got := header.Get("traceparent"); got != "" {
 		t.Fatalf("non-conflicting staged header escaped colliding set: %q", got)
+	}
+}
+
+func TestInjectPropagationSafelyDropsAllStagedHeadersForUnstableValue(t *testing.T) {
+	t.Parallel()
+
+	header := nats.Header{}
+	header.Set("X-Business", "keep")
+	client := &Client{propagator: unstableHeaderValuePropagator{}}
+
+	client.injectPropagationSafely(context.Background(), header)
+
+	if got := header.Get("X-Business"); got != "keep" {
+		t.Fatalf("business header = %q, want keep", got)
+	}
+	if got := header.Get("traceparent"); got != "" {
+		t.Fatalf("stable staged header escaped unstable propagation set: %q", got)
+	}
+	if got := header.Get("baggage"); got != "" {
+		t.Fatalf("unstable staged header escaped propagation set: %q", got)
 	}
 }
 

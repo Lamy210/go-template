@@ -142,6 +142,12 @@ func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header
 			// observability propagation never owns that transport namespace.
 			return
 		}
+		if !stableNATSHeaderValue(stagedCarrier.Get(key)) {
+			// nats.go trims surrounding ASCII whitespace and replaces CR/LF
+			// while serializing values. Propagation must remain byte-stable;
+			// discard the complete optional set instead of silently mutating it.
+			return
+		}
 		if target.Has(key) {
 			// Existing message headers are business/transport state. Never let
 			// optional propagation overwrite message identity or quarantine

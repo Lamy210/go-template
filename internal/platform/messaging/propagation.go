@@ -1,8 +1,10 @@
 package messaging
 
 import (
+	"net/textproto"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/nats-io/nats.go"
@@ -72,4 +74,17 @@ func validNATSHeaderKey(key string) bool {
 func natsControlHeaderKey(key string) bool {
 	const prefix = "Nats-"
 	return len(key) >= len(prefix) && strings.EqualFold(key[:len(prefix)], prefix)
+}
+
+// stableNATSHeaderValue rejects propagation values that nats.go v1.54.0 would
+// change while serializing a header. Observability metadata must reach the
+// broker byte-for-byte equivalent to what the propagator produced.
+func stableNATSHeaderValue(value string) bool {
+	if !utf8.ValidString(value) {
+		return false
+	}
+	if textproto.TrimString(value) != value {
+		return false
+	}
+	return !strings.ContainsAny(value, "\r\n")
 }
