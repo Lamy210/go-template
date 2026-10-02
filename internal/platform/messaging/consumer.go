@@ -140,8 +140,9 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	}
 
 	// Preserve request-scoped values but detach cancellation for already-buffered
-	// work. Shutdown stops new deliveries via ConsumeContext.Drain while each
-	// in-flight handler remains bounded by HandlerTimeout.
+	// work. Shutdown stops new deliveries via ConsumeContext.Drain while the
+	// outer wait remains bounded by the full handler/publish/ack settlement
+	// duration computed above.
 	workCtx := context.WithoutCancel(ctx)
 	consumeCtx, err := consumer.Consume(
 		func(msg jetstream.Msg) {
