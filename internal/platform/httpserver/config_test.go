@@ -90,6 +90,12 @@ func TestNewRejectsInvalidBoundaryInputs(t *testing.T) {
 		t.Fatal("New() nil logger error = nil")
 	}
 
+	invalidInfo := testServiceInfo()
+	invalidInfo.Version = string([]byte{0xff})
+	if _, err := New(testConfig(), logger, invalidInfo, nil); err == nil {
+		t.Fatal("New() invalid service metadata error = nil")
+	}
+
 	if _, err := New(
 		testConfig(),
 		logger,
