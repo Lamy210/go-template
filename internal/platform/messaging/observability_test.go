@@ -202,6 +202,12 @@ func TestValidNATSHeaderKey(t *testing.T) {
 			t.Fatalf("validNATSHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
 		}
 	}
+	for _, forbidden := range natsHeaderKeyForbidden {
+		key := "X" + string(forbidden) + "Y"
+		if validNATSHeaderKey(key) {
+			t.Fatalf("validNATSHeaderKey(%q) = true for pinned forbidden character %q", key, forbidden)
+		}
+	}
 }
 
 func TestStableNATSHeaderValue(t *testing.T) {
