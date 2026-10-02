@@ -276,7 +276,7 @@ func (c NATSConfig) Validate() error {
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("NATS consumer limits must be positive")
 	}
-	if c.ProcessAttempts > math.MaxInt-c.QuarantineAttempts {
+	if c.ProcessAttempts > math.MaxInt-(c.QuarantineAttempts-1) {
 		return fmt.Errorf("NATS delivery attempts exceed integer range")
 	}
 	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 {

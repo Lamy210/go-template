@@ -223,7 +223,7 @@ The current increments provide:
 - Huma OpenAPI 3.1 generation on top of chi;
 - liveness/readiness probes;
 - optional PostgreSQL with pgx/sqlc/Atlas;
-- optional NATS JetStream with bounded retry/quarantine, readiness, transport-neutral context propagation, and optional operation tracing;
+- optional NATS JetStream with bounded retry/quarantine, exact process/quarantine delivery budgets, readiness, transport-neutral context propagation, and optional operation tracing;
 - optional OpenTelemetry traces/metrics with OTLP/HTTP export, HTTP instrumentation, and W3C propagation plus publish/process spans across NATS when both profiles are enabled;
 - optional transactional outbox dispatch with bounded claiming, concurrent publish, finite retry, and lifecycle wiring;
 - unit, transport, database/Testcontainers, messaging, outbox, and telemetry export tests;

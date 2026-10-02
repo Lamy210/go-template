@@ -79,7 +79,7 @@ func (c ConsumerConfig) Validate() error {
 	if c.AckWait <= 0 || c.ProcessAttempts <= 0 || c.QuarantineAttempts <= 0 || c.MaxAckPending <= 0 {
 		return fmt.Errorf("consumer limits must be positive")
 	}
-	if c.ProcessAttempts > math.MaxInt-c.QuarantineAttempts {
+	if c.ProcessAttempts > math.MaxInt-(c.QuarantineAttempts-1) {
 		return fmt.Errorf("consumer delivery attempts exceed integer range")
 	}
 	if c.RetryDelay <= 0 || c.HandlerTimeout <= 0 || c.AckTimeout <= 0 || c.PullExpiry < time.Second {
@@ -243,12 +243,15 @@ func verifyManagedConsumer(
 }
 
 func managedConsumerConfig(cfg ConsumerConfig) jetstream.ConsumerConfig {
+	// The last processing delivery also performs quarantine attempt 1 after a
+	// handler failure, so only QuarantineAttempts-1 additional deliveries are
+	// needed for the quarantine phase.
 	return jetstream.ConsumerConfig{
 		Durable:       cfg.Durable,
 		DeliverPolicy: jetstream.DeliverAllPolicy,
 		AckPolicy:     jetstream.AckExplicitPolicy,
 		AckWait:       cfg.AckWait,
-		MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts,
+		MaxDeliver:    cfg.ProcessAttempts + cfg.QuarantineAttempts - 1,
 		FilterSubject: cfg.FilterSubject,
 		ReplayPolicy:  jetstream.ReplayInstantPolicy,
 		MaxAckPending: cfg.MaxAckPending,
@@ -378,13 +381,14 @@ func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
-	if cfg.ProcessAttempts < 0 || cfg.QuarantineAttempts < 0 {
-		return 0, 0, fmt.Errorf("consumer delivery attempts must not be negative")
+	if cfg.ProcessAttempts <= 0 || cfg.QuarantineAttempts <= 0 {
+		return 0, 0, fmt.Errorf("consumer delivery attempts must be positive")
 	}
 
 	processAttempts := uint64(cfg.ProcessAttempts)
 	quarantineAttempts := uint64(cfg.QuarantineAttempts)
-	return processAttempts, processAttempts + quarantineAttempts, nil
+	// The final handler delivery is also the first quarantine-publish attempt.
+	return processAttempts, processAttempts + quarantineAttempts - 1, nil
 }
 
 func doubleAck(parent context.Context, msg jetstream.Msg, timeout time.Duration) error {

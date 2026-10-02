@@ -204,6 +204,13 @@ small enough for normal NATS header limits and operational inspection.
 5. If quarantine publishing repeatedly fails, the worker returns an
    infrastructure error instead of retrying forever.
 
+`NATS_PROCESS_ATTEMPTS` counts handler executions. `NATS_QUARANTINE_ATTEMPTS`
+counts quarantine publish attempts, including the first quarantine publish
+performed immediately after the final failed handler execution. The managed
+consumer therefore uses `MaxDeliver = process attempts + quarantine attempts - 1`;
+the final processing delivery is also quarantine attempt 1 and must not be
+counted twice.
+
 Handler error text is not copied into quarantine headers or generic
 infrastructure logs.
 
@@ -264,6 +271,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - handler deadline expiry followed by retry even when the handler returns nil;
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
+- exact process/quarantine delivery budgeting without an extra quarantine attempt;
 - consumer drain on cancellation;
 - NATS/JetStream readiness while the required stream exists with the managed configuration;
 - startup provisioning refuses managed drift without auto-reconciling it;
