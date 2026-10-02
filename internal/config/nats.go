@@ -284,6 +284,16 @@ func (c NATSConfig) Validate() error {
 	if err := natssubject.ValidateLiteral(c.QuarantineSubject); err != nil {
 		return fmt.Errorf("NATS_QUARANTINE_SUBJECT is invalid: %w", err)
 	}
+	quarantineCovered := false
+	for _, subject := range c.Subjects {
+		if natssubject.PatternMatchesLiteral(subject, c.QuarantineSubject) {
+			quarantineCovered = true
+			break
+		}
+	}
+	if !quarantineCovered {
+		return fmt.Errorf("NATS_QUARANTINE_SUBJECT must be contained by NATS_SUBJECTS")
+	}
 	if natssubject.PatternMatchesLiteral(c.FilterSubject, c.QuarantineSubject) {
 		return fmt.Errorf("NATS_FILTER_SUBJECT must not match NATS_QUARANTINE_SUBJECT")
 	}
