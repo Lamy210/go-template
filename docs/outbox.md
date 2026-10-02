@@ -215,7 +215,9 @@ lease/transaction recovery semantics to the store implementation.
 
 ## Settlement
 
-Settlement requires both row ID and current lease token.
+Settlement requires both row ID and current lease token. Settlement methods
+reject non-positive row IDs and missing lock tokens before PostgreSQL is touched,
+so caller defects are not misclassified as lease-loss or database failures.
 
 - `MarkPublished` records successful dispatch.
 - `Retry` clears the lease and moves `available_at`.
