@@ -171,11 +171,13 @@ cannot replace the caller's deadline, cancellation lifetime, or cancellation
 cause. Propagation injection is staged in a temporary header map so a panicking
 hook cannot leave partially written trace headers on an outbound message. The
 staged set is also discarded as a whole if a propagator emits a NATS ADR-4
-invalid header key, attempts to use the adapter-reserved `Nats-*` transport
-control namespace, or collides with an existing message header. This keeps
-business/transport headers such as `Nats-Msg-Id` and JetStream expectation
-headers authoritative and prevents observability metadata from changing publish
-semantics.
+invalid header key, emits a value that would be changed by nats.go header
+serialization (invalid UTF-8, surrounding ASCII whitespace, or CR/LF), attempts
+to use the adapter-reserved `Nats-*` transport control namespace, or collides
+with an existing message header. This keeps propagation values byte-stable,
+keeps business/transport headers such as `Nats-Msg-Id` and JetStream
+expectation headers authoritative, and prevents observability metadata from
+changing publish semantics.
 
 Publish-size preflight follows the same fail-open policy. The business headers,
 stable `Nats-Msg-Id`, and payload are checked first. Only a business message
@@ -253,6 +255,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - header-aware publish-size preflight against managed stream limits;
 - fail-open propagation rollback when observability headers alone exceed a publish limit;
 - fail-open discard of propagation sets containing ADR-4-invalid NATS header keys;
+- fail-open discard of propagation values that nats.go would trim, rewrite, or serialize as invalid UTF-8;
 - preservation of business message identity when propagation emits colliding headers;
 - fail-open rejection of propagated `Nats-*` JetStream control headers;
 - publish-to-handler context propagation through real NATS headers;
