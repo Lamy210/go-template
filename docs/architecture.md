@@ -119,6 +119,11 @@ validation shared by environment validation and the messaging adapter. Keeping
 this protocol-specific policy outside `internal/core` avoids making core
 depend on NATS while preventing the two startup boundaries from drifting.
 
+The stdlib-only `internal/natsbudget` package similarly owns the full consumer
+settlement window shared by environment validation and runtime consumption. Its
+worst case is handler execution + quarantine publish + acknowledgement; using
+one policy prevents `AckWait` validation from omitting a runtime phase.
+
 Business handlers do not live in `internal/platform/messaging`. A feature owns its subject/filter/durable policy and passes its handler to the platform consumer. Normal shutdown drains buffered consumer work and then drains the NATS connection; both paths are bounded.
 
 Cross-process context propagation is expressed through the stdlib-only `internal/core/propagation` contract. Telemetry implements the propagator, messaging implements the NATS header carrier, and `internal/app` wires them together only when both profiles are enabled.
