@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsbudget"
 	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
@@ -101,6 +102,12 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := c.validateInitialized(); err != nil {
+		return err
+	}
+	if err := validateConsumerSettlementBudget(cfg, c.requestTimeout); err != nil {
+		return err
+	}
 	processAttempts, totalAttempts, err := deliveryAttemptLimits(cfg)
 	if err != nil {
 		return err
@@ -127,7 +134,8 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 
 	// Preserve request-scoped values but detach cancellation for already-buffered
 	// work. Shutdown stops new deliveries via ConsumeContext.Drain while each
-	// in-flight handler remains bounded by HandlerTimeout.
+	// in-flight delivery remains bounded by AckWait across handler, optional
+	// quarantine publish, and acknowledgement.
 	workCtx := context.WithoutCancel(ctx)
 	consumeCtx, err := consumer.Consume(
 		func(msg jetstream.Msg) {
@@ -154,7 +162,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	select {
 	case <-ctx.Done():
 		consumeCtx.Drain()
-		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.HandlerTimeout+cfg.AckTimeout)
+		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.AckWait)
 		defer cancel()
 		select {
 		case <-consumeCtx.Closed():
@@ -167,7 +175,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		consumeCtx.Stop()
 		stopCtx, cancel := context.WithTimeout(
 			context.Background(),
-			cfg.HandlerTimeout+cfg.AckTimeout,
+			cfg.AckWait,
 		)
 		defer cancel()
 
@@ -378,6 +386,23 @@ func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error
 		return err
 	}
 	return ctx.Err()
+}
+
+func validateConsumerSettlementBudget(
+	cfg ConsumerConfig,
+	publishTimeout time.Duration,
+) error {
+	if !natsbudget.AckWaitCoversSettlement(
+		cfg.AckWait,
+		cfg.HandlerTimeout,
+		publishTimeout,
+		cfg.AckTimeout,
+	) {
+		return fmt.Errorf(
+			"consumer ack wait must exceed handler timeout plus publish timeout plus ack timeout",
+		)
+	}
+	return nil
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
