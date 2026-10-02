@@ -72,10 +72,10 @@ func TestDeliveryAttemptLimitsCountFinalProcessingDeliveryAsFirstQuarantineAttem
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		processAttempts   int
+		name               string
+		processAttempts    int
 		quarantineAttempts int
-		wantTotal         uint64
+		wantTotal          uint64
 	}{
 		{
 			name:               "single quarantine attempt needs no extra delivery",
