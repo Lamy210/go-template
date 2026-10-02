@@ -75,18 +75,21 @@ func TestDeliveryAttemptLimitsCountFinalProcessingDeliveryAsFirstQuarantineAttem
 		name               string
 		processAttempts    int
 		quarantineAttempts int
+		wantProcess        uint64
 		wantTotal          uint64
 	}{
 		{
 			name:               "single quarantine attempt needs no extra delivery",
 			processAttempts:    1,
 			quarantineAttempts: 1,
+			wantProcess:        1,
 			wantTotal:          1,
 		},
 		{
 			name:               "two quarantine attempts need one extra delivery",
 			processAttempts:    3,
 			quarantineAttempts: 2,
+			wantProcess:        3,
 			wantTotal:          4,
 		},
 	}
@@ -101,8 +104,8 @@ func TestDeliveryAttemptLimitsCountFinalProcessingDeliveryAsFirstQuarantineAttem
 			if err != nil {
 				t.Fatalf("deliveryAttemptLimits() error = %v", err)
 			}
-			if process != uint64(tt.processAttempts) {
-				t.Fatalf("process attempts = %d, want %d", process, tt.processAttempts)
+			if process != tt.wantProcess {
+				t.Fatalf("process attempts = %d, want %d", process, tt.wantProcess)
 			}
 			if total != tt.wantTotal {
 				t.Fatalf("total deliveries = %d, want %d", total, tt.wantTotal)
