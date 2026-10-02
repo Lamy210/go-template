@@ -253,6 +253,9 @@ func (c NATSConfig) Validate() error {
 			return fmt.Errorf("NATS_SUBJECTS contains an invalid subject pattern: %w", err)
 		}
 	}
+	if natssubject.HasDuplicatePatterns(c.Subjects) {
+		return fmt.Errorf("NATS_SUBJECTS must not contain duplicates")
+	}
 	if c.MaxConsumers <= 0 || c.MaxMessages <= 0 || c.MaxBytes <= 0 || c.MaxMessageSize <= 0 {
 		return fmt.Errorf("NATS stream limits must be positive")
 	}
