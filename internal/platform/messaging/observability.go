@@ -129,7 +129,16 @@ func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header
 
 	target := natsHeaderCarrier{header: header}
 	stagedCarrier := natsHeaderCarrier{header: staged}
-	for _, key := range stagedCarrier.Keys() {
+	keys := stagedCarrier.Keys()
+	for _, key := range keys {
+		if !validNATSHeaderKey(key) {
+			// Propagation is optional observability metadata. Discard the
+			// complete staged set rather than letting one invalid key make an
+			// otherwise valid business message fail NATS header serialization.
+			return
+		}
+	}
+	for _, key := range keys {
 		target.Set(key, stagedCarrier.Get(key))
 	}
 }
