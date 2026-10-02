@@ -45,3 +45,17 @@ func (c natsHeaderCarrier) Keys() []string {
 	sort.Strings(keys)
 	return keys
 }
+
+// validNATSHeaderKey mirrors the pinned nats.go ADR-4 header-key contract:
+// non-empty printable ASCII, excluding colon.
+func validNATSHeaderKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		if key[i] < 0x21 || key[i] > 0x7e || key[i] == ':' {
+			return false
+		}
+	}
+	return true
+}
