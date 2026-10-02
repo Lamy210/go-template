@@ -25,6 +25,46 @@ func ValidateLiteral(subject string) error {
 	return validate(subject, false)
 }
 
+// PatternContainsPattern reports whether every subject matched by candidate is
+// also matched by container. Both arguments must already satisfy ValidatePattern.
+func PatternContainsPattern(container, candidate string) bool {
+	containerTokens := strings.Split(container, ".")
+	candidateTokens := strings.Split(candidate, ".")
+
+	containerTailWildcard := containerTokens[len(containerTokens)-1] == ">"
+	candidateTailWildcard := candidateTokens[len(candidateTokens)-1] == ">"
+
+	if !containerTailWildcard {
+		if candidateTailWildcard || len(containerTokens) != len(candidateTokens) {
+			return false
+		}
+		for i := range containerTokens {
+			if !patternTokenContains(containerTokens[i], candidateTokens[i]) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// A terminal > consumes one or more tokens, so the candidate's minimum
+	// matched length must be at least the container's minimum matched length.
+	if len(candidateTokens) < len(containerTokens) {
+		return false
+	}
+
+	containerPrefix := containerTokens[:len(containerTokens)-1]
+	for i, token := range containerPrefix {
+		if !patternTokenContains(token, candidateTokens[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func patternTokenContains(container, candidate string) bool {
+	return container == "*" || container == candidate
+}
+
 // PatternMatchesLiteral reports whether a previously validated NATS pattern
 // includes a previously validated literal subject.
 func PatternMatchesLiteral(pattern, literal string) bool {

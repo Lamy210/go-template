@@ -88,6 +88,11 @@ durable/filter policy they own. This keeps the NATS profile reusable and
 prevents infrastructure code from becoming a business `worker` dumping
 ground.
 
+A consumer filter must be fully contained by at least one configured stream
+subject pattern. The template validates this locally with the same NATS
+`*` / terminal-`>` subset semantics used by the server, so a deterministic
+filter/stream mismatch fails before consumer provisioning.
+
 ## Transactional outbox compatibility
 
 The PostgreSQL outbox storage layer is independent of NATS. Its stable

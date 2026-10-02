@@ -73,6 +73,16 @@ func (c ConsumerConfig) Validate() error {
 	if err := natssubject.ValidatePattern(c.FilterSubject); err != nil {
 		return fmt.Errorf("consumer filter subject is invalid: %w", err)
 	}
+	filterCovered := false
+	for _, subject := range c.Stream.Subjects {
+		if natssubject.PatternContainsPattern(subject, c.FilterSubject) {
+			filterCovered = true
+			break
+		}
+	}
+	if !filterCovered {
+		return fmt.Errorf("consumer filter subject must be contained by stream subjects")
+	}
 	if err := natssubject.ValidateLiteral(c.QuarantineSubject); err != nil {
 		return fmt.Errorf("consumer quarantine subject is invalid: %w", err)
 	}

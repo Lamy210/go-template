@@ -261,6 +261,56 @@ func TestStreamConfigRejectsInvalidSubjectPattern(t *testing.T) {
 	}
 }
 
+func TestConsumerConfigRejectsFilterOutsideStreamSubjects(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		subjects []string
+		filter   string
+	}{
+		{
+			name:     "different prefix",
+			subjects: []string{"events.>"},
+			filter:   "jobs.work",
+		},
+		{
+			name:     "filter is broader than stream",
+			subjects: []string{"events.*"},
+			filter:   "events.>",
+		},
+		{
+			name:     "filter can match shorter subject than stream",
+			subjects: []string{"events.*.>"},
+			filter:   "events.*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := testConsumerConfig()
+			cfg.Stream.Subjects = tt.subjects
+			cfg.FilterSubject = tt.filter
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("Validate() error = nil, want uncovered filter error")
+			}
+		})
+	}
+}
+
+func TestConsumerConfigAcceptsFilterCoveredByAnyStreamSubject(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.Stream.Subjects = []string{"audit.>", "events.>"}
+	cfg.FilterSubject = "events.work.*"
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func TestConsumerConfigRejectsQuarantineRecapture(t *testing.T) {
 	t.Parallel()
 

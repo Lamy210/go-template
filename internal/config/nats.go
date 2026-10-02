@@ -268,6 +268,16 @@ func (c NATSConfig) Validate() error {
 	if err := natssubject.ValidatePattern(c.FilterSubject); err != nil {
 		return fmt.Errorf("NATS_FILTER_SUBJECT is invalid: %w", err)
 	}
+	filterCovered := false
+	for _, subject := range c.Subjects {
+		if natssubject.PatternContainsPattern(subject, c.FilterSubject) {
+			filterCovered = true
+			break
+		}
+	}
+	if !filterCovered {
+		return fmt.Errorf("NATS_FILTER_SUBJECT must be contained by NATS_SUBJECTS")
+	}
 	if err := natssubject.ValidateLiteral(c.QuarantineSubject); err != nil {
 		return fmt.Errorf("NATS_QUARANTINE_SUBJECT is invalid: %w", err)
 	}
