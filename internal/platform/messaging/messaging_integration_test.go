@@ -142,7 +142,7 @@ func (invalidHeaderIntegrationPropagator) Inject(
 	carrier coreprop.TextMapCarrier,
 ) {
 	carrier.Set(testCorrelationHeader, "must-be-dropped")
-	carrier.Set("invalid:header", "bad")
+	carrier.Set("invalid/header", "bad")
 }
 
 func (invalidHeaderIntegrationPropagator) Extract(
@@ -726,7 +726,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		if got := received.Header.Get(testCorrelationHeader); got != "" {
 			t.Fatalf("staged propagation header = %q, want dropped", got)
 		}
-		if _, ok := received.Header["invalid:header"]; ok {
+		if _, ok := received.Header["invalid/header"]; ok {
 			t.Fatal("invalid propagation header reached broker")
 		}
 		if got := received.Header.Get(jetstream.MsgIDHeader); got != msgID {
