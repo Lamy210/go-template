@@ -27,6 +27,15 @@ func (c natsHeaderCarrier) Get(key string) string {
 	return ""
 }
 
+func (c natsHeaderCarrier) Has(key string) bool {
+	for existingKey := range c.header {
+		if strings.EqualFold(existingKey, key) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c natsHeaderCarrier) Set(key, value string) {
 	for existingKey := range c.header {
 		if strings.EqualFold(existingKey, key) {
