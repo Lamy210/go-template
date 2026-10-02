@@ -28,16 +28,18 @@ created when missing, but an existing durable is never updated implicitly by
 - finite quarantine-publish attempts;
 - finite `MaxAckPending`;
 - bounded handler and ack timeouts;
-- `AckWait` strictly greater than `HandlerTimeout + AckTimeout`;
+- `AckWait` strictly greater than `HandlerTimeout + RequestTimeout + AckTimeout`;
 - delayed retry rather than immediate hot-loop redelivery.
 
 The consumer currently does not send periodic `InProgress` acknowledgements.
 JetStream redelivers an unacknowledged message after `AckWait`, so the template
-reserves enough acknowledgement budget for the full bounded handler execution
-plus the bounded `DoubleAck` confirmation. The default is therefore
-`AckWait=40s`, `HandlerTimeout=30s`, and `AckTimeout=5s`, leaving 5 seconds
-of scheduling/network slack. Invalid combinations fail validation before the
-consumer starts.
+reserves enough acknowledgement budget for the worst-case final processing
+delivery: bounded handler execution, one bounded quarantine publish using the
+client request timeout, and bounded `DoubleAck` confirmation. The default is
+therefore `AckWait=45s`, `HandlerTimeout=30s`, `RequestTimeout=5s`, and
+`AckTimeout=5s`, leaving 5 seconds of scheduling/network slack. Process-level
+configuration and `RunConsumer` both reject an AckWait that does not strictly
+cover that full sequence.
 
 JetStream streams are created with finite message count, byte, age, consumer,
 and single-message-size limits. The template never relies on JetStream's
@@ -235,10 +237,11 @@ worker process.
 ## Graceful shutdown
 
 The consumer uses JetStream `ConsumeContext.Drain` on normal cancellation so
-buffered deliveries can finish. Handler and acknowledgement work remains
-bounded by explicit timeouts. The NATS connection then has its own bounded
-drain lifecycle. A broker-side drain timeout is surfaced as a safe operation
-error instead of being silently treated as a successful close.
+buffered deliveries can finish. Its outer callback-drain budget covers the full
+bounded handler + quarantine publish + acknowledgement sequence; quarantine
+publishing is not omitted from shutdown timing. The NATS connection then has its
+own bounded drain lifecycle. A broker-side drain timeout is surfaced as a safe
+operation error instead of being silently treated as a successful close.
 
 This avoids leaving a live consume goroutine after process shutdown.
 
@@ -272,7 +275,8 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - delayed retry followed by successful acknowledgement;
 - bounded failure followed by quarantine with propagation preserved;
 - exact process/quarantine delivery budgeting without an extra quarantine attempt;
-- consumer drain on cancellation;
+- full handler + quarantine-publish + acknowledgement AckWait validation;
+- consumer drain on cancellation with the full settlement window;
 - NATS/JetStream readiness while the required stream exists with the managed configuration;
 - startup provisioning refuses managed drift without auto-reconciling it;
 - readiness failure after a managed stream field drifts;
