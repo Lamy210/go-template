@@ -17,8 +17,8 @@ type healthResponse struct {
 	}
 }
 
-func registerHealth(api huma.API, ready ReadinessCheck) {
-	registerOperation(api, huma.Operation{
+func registerHealth(api huma.API, maxBodyBytes int64, ready ReadinessCheck) {
+	registerOperation(api, maxBodyBytes, huma.Operation{
 		OperationID: "health-live",
 		Method:      http.MethodGet,
 		Path:        "/health/live",
@@ -30,7 +30,7 @@ func registerHealth(api huma.API, ready ReadinessCheck) {
 		return out, nil
 	})
 
-	registerOperation(api, huma.Operation{
+	registerOperation(api, maxBodyBytes, huma.Operation{
 		OperationID: "health-ready",
 		Method:      http.MethodGet,
 		Path:        "/health/ready",
