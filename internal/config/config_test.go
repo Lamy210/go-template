@@ -439,7 +439,7 @@ func TestNATSValidateRejectsRuntimeIncompatibleConsumerBounds(t *testing.T) {
 			name: "delivery attempt overflow",
 			mutate: func(cfg *NATSConfig) {
 				cfg.ProcessAttempts = math.MaxInt
-				cfg.QuarantineAttempts = 1
+				cfg.QuarantineAttempts = 2
 			},
 		},
 	}
