@@ -57,9 +57,11 @@ or token grammar: it remains transport-neutral, and a configured publisher owns
 transport-specific subject validation.
 
 PostgreSQL CHECK constraints use `octet_length` for the same event-ID, subject,
-`traceparent`, and `tracestate` byte ceilings enforced by Go. Direct SQL,
-legacy writers, or custom persistence code therefore cannot bypass the durable
-byte contract merely by using multibyte UTF-8 characters.
+`traceparent`, and `tracestate` byte ceilings enforced by Go. The event-ID
+constraint also mirrors the canonical message-ID rule: leading/trailing ASCII
+space, TAB, CR, or LF is rejected, as are CR/LF anywhere in the identifier.
+Internal TAB remains valid. Direct SQL, legacy writers, or custom persistence
+code therefore cannot bypass the durable ID/text contract.
 
 ## Propagation metadata
 
