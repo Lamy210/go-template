@@ -197,7 +197,7 @@ func TestConsumerConfigRejectsDeliveryAttemptOverflow(t *testing.T) {
 		QuarantineSubject:  "test.quarantine",
 		AckWait:            time.Second,
 		ProcessAttempts:    int(^uint(0) >> 1),
-		QuarantineAttempts: 1,
+		QuarantineAttempts: 2,
 		MaxAckPending:      1,
 		RetryDelay:         time.Second,
 		HandlerTimeout:     time.Second,
