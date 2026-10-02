@@ -62,6 +62,76 @@ func TestHumaValidationErrorUsesCommonContract(t *testing.T) {
 	}
 }
 
+func TestRegisterOperationUsesConfiguredBodyLimitAboveHumaDefault(t *testing.T) {
+	t.Parallel()
+
+	const maxBodyBytes = int64(2 << 20)
+
+	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	router.Use(middleware.RequestSize(maxBodyBytes))
+	api := humachi.New(router, newAPIConfig(true))
+
+	type input struct {
+		Body struct {
+			Data string `json:"data"`
+		}
+	}
+	type output struct {
+		Body struct {
+			Size int `json:"size"`
+		}
+	}
+
+	var handled bool
+	registerOperation(api, maxBodyBytes, huma.Operation{
+		OperationID: "test-large-body",
+		Method:      http.MethodPost,
+		Path:        "/test-large-body",
+	}, func(_ context.Context, in *input) (*output, error) {
+		handled = true
+		out := &output{}
+		out.Body.Size = len(in.Body.Data)
+		return out, nil
+	})
+
+	payload := `{"data":"` + strings.Repeat("a", (1<<20)+1024) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/test-large-body", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", res.Code, http.StatusOK, res.Body.String())
+	}
+	if !handled {
+		t.Fatal("handler was not called for body within configured global limit")
+	}
+}
+
+func TestBoundedOperationBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	const global = int64(1024)
+	for _, tt := range []struct {
+		name      string
+		operation int64
+		want      int64
+	}{
+		{name: "unset uses global", operation: 0, want: global},
+		{name: "unlimited is capped", operation: -1, want: global},
+		{name: "larger is capped", operation: 2048, want: global},
+		{name: "smaller is preserved", operation: 512, want: 512},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := boundedOperationBodyLimit(tt.operation, global); got != tt.want {
+				t.Fatalf("boundedOperationBodyLimit(%d, %d) = %d, want %d", tt.operation, global, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHumaUnknownHandlerErrorIsSanitized(t *testing.T) {
 	t.Parallel()
 

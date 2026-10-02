@@ -35,6 +35,12 @@ budgeting remains at the composition root because it coordinates HTTP, messaging
 telemetry, and database teardown rather than configuring `net/http.Server`
 itself.
 
+The configured HTTP body limit is enforced twice at the transport boundary:
+chi provides the adapter-wide hard cap, and Huma operations inherit the same
+limit when they do not request a smaller positive bound. Operation-local
+unlimited or larger limits are capped to the adapter setting, preventing Huma's
+own 1 MiB default from silently overriding a larger configured process limit.
+
 The built-in Huma documentation surface is explicitly controllable. When it is
 disabled, the adapter leaves Docs UI, OpenAPI, and schema routes unregistered.
 
