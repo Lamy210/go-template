@@ -45,6 +45,23 @@ func (p extractedContextPropagator) Extract(
 	return p.ctx
 }
 
+type collidingHeaderPropagator struct{}
+
+func (collidingHeaderPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set("traceparent", "must-be-dropped")
+	carrier.Set("nats-msg-id", "observability-must-not-overwrite")
+}
+
+func (collidingHeaderPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type invalidHeaderKeyPropagator struct{}
 
 func (invalidHeaderKeyPropagator) Inject(
@@ -145,6 +162,43 @@ func TestValidNATSHeaderKey(t *testing.T) {
 		if got := validNATSHeaderKey(tt.key); got != tt.want {
 			t.Fatalf("validNATSHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
 		}
+	}
+}
+
+func TestNATSHeaderCarrierHasIsCaseInsensitiveAndDetectsEmptyValues(t *testing.T) {
+	t.Parallel()
+
+	carrier := natsHeaderCarrier{
+		header: nats.Header{
+			"Nats-Msg-Id": {""},
+		},
+	}
+	if !carrier.Has("nats-msg-id") {
+		t.Fatal("Has() = false for case-insensitive existing empty-value header")
+	}
+	if carrier.Has("missing") {
+		t.Fatal("Has() = true for missing header")
+	}
+}
+
+func TestInjectPropagationSafelyDoesNotOverwriteBusinessHeaders(t *testing.T) {
+	t.Parallel()
+
+	header := nats.Header{}
+	header.Set("Nats-Msg-Id", "business-id")
+	header.Set("X-Business", "keep")
+	client := &Client{propagator: collidingHeaderPropagator{}}
+
+	client.injectPropagationSafely(context.Background(), header)
+
+	if got := header.Get("Nats-Msg-Id"); got != "business-id" {
+		t.Fatalf("message ID = %q, want business-id", got)
+	}
+	if got := header.Get("X-Business"); got != "keep" {
+		t.Fatalf("business header = %q, want keep", got)
+	}
+	if got := header.Get("traceparent"); got != "" {
+		t.Fatalf("non-conflicting staged header escaped colliding set: %q", got)
 	}
 }
 
