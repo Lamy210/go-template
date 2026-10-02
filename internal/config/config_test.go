@@ -220,6 +220,23 @@ func TestLoadRejectsUnboundedNATSReconnects(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNATSFilterOutsideStreamSubjects(t *testing.T) {
+	t.Parallel()
+
+	_, err := load(func(key string) (string, bool) {
+		values := map[string]string{
+			"NATS_ENABLED":        "true",
+			"NATS_SUBJECTS":       "events.*",
+			"NATS_FILTER_SUBJECT": "events.>",
+		}
+		value, ok := values[key]
+		return value, ok
+	})
+	if err == nil || !strings.Contains(err.Error(), "NATS_FILTER_SUBJECT") {
+		t.Fatalf("load error = %v, want uncovered NATS_FILTER_SUBJECT error", err)
+	}
+}
+
 func TestLoadRejectsNATSAckBudgetWithoutPublishSlack(t *testing.T) {
 	t.Parallel()
 
