@@ -44,8 +44,8 @@ type versionResponse struct {
 	Body ServiceInfo
 }
 
-func registerVersion(api huma.API, info ServiceInfo) {
-	registerOperation(api, huma.Operation{
+func registerVersion(api huma.API, maxBodyBytes int64, info ServiceInfo) {
+	registerOperation(api, maxBodyBytes, huma.Operation{
 		OperationID: "service-version",
 		Method:      http.MethodGet,
 		Path:        "/version",
