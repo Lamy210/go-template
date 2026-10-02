@@ -1014,6 +1014,27 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			t.Fatal("timed out waiting for quarantine message")
 		}
 
+		adminConn, err := nats.Connect(natsURL, nats.Timeout(2*time.Second))
+		if err != nil {
+			t.Fatalf("open quarantine-budget admin connection: %v", err)
+		}
+		defer adminConn.Close()
+		adminJS, err := jetstream.New(adminConn)
+		if err != nil {
+			t.Fatalf("create quarantine-budget admin client: %v", err)
+		}
+		sourceConsumer, err := adminJS.Consumer(ctx, stream.Name, "failing-worker")
+		if err != nil {
+			t.Fatalf("load source consumer: %v", err)
+		}
+		sourceInfo := sourceConsumer.CachedInfo()
+		if sourceInfo == nil {
+			t.Fatal("source consumer info is unavailable")
+		}
+		if got := sourceInfo.Config.MaxDeliver; got != 2 {
+			t.Fatalf("source MaxDeliver = %d, want 2 for process=1 quarantine=2", got)
+		}
+
 		stopSource()
 		stopQuarantine()
 		for name, ch := range map[string]<-chan error{
