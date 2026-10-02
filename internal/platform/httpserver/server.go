@@ -114,8 +114,8 @@ func New(
 	router.Use(middleware.RequestSize(cfg.MaxBodyBytes))
 
 	api := humachi.New(router, newAPIConfig(cfg.DocsEnabled))
-	registerHealth(api, ready)
-	registerVersion(api, info)
+	registerHealth(api, cfg.MaxBodyBytes, ready)
+	registerVersion(api, cfg.MaxBodyBytes, info)
 
 	var handler http.Handler = router
 	for i := len(options.outerMiddleware) - 1; i >= 0; i-- {
