@@ -235,11 +235,15 @@ counted twice.
 Handler error text is not copied into quarantine headers or generic
 infrastructure logs.
 
-The quarantine subject must be a literal publish subject and must not be covered
-by the consumer filter. For example, a filter such as `events.>` cannot be
-combined with `events.quarantine`: the quarantine publish would otherwise be
-captured by the same durable consumer and re-enter normal processing. Subject
-patterns are validated at startup, including wildcard token placement.
+The quarantine subject must be a literal publish subject, must be covered by at
+least one subject pattern of the stream managed by `RunConsumer`, and must not
+be covered by the consumer filter. Requiring stream coverage avoids a latent
+configuration where normal processing starts successfully but the first poison
+message cannot be published to JetStream quarantine. For example, a filter such
+as `events.>` cannot be combined with `events.quarantine`: the quarantine
+publish would otherwise be captured by the same durable consumer and re-enter
+normal processing. Subject patterns are validated at startup, including
+wildcard token placement.
 
 A handler must honor its context cancellation promptly. If it returns `nil`
 after its handler context has already expired, the messaging boundary treats the
