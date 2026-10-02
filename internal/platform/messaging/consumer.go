@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/natsbudget"
 	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
 	"github.com/nats-io/nats.go"
@@ -101,6 +102,19 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := c.validateInitialized(); err != nil {
+		return err
+	}
+	settlementTimeout, ok := natsbudget.SettlementDuration(
+		cfg.HandlerTimeout,
+		c.requestTimeout,
+		cfg.AckTimeout,
+	)
+	if !ok || cfg.AckWait <= settlementTimeout {
+		return fmt.Errorf(
+			"consumer ack wait must exceed handler timeout plus publish timeout plus ack timeout",
+		)
+	}
 	processAttempts, totalAttempts, err := deliveryAttemptLimits(cfg)
 	if err != nil {
 		return err
@@ -154,7 +168,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 	select {
 	case <-ctx.Done():
 		consumeCtx.Drain()
-		drainCtx, cancel := context.WithTimeout(context.Background(), cfg.HandlerTimeout+cfg.AckTimeout)
+		drainCtx, cancel := context.WithTimeout(context.Background(), settlementTimeout)
 		defer cancel()
 		select {
 		case <-consumeCtx.Closed():
@@ -167,7 +181,7 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 		consumeCtx.Stop()
 		stopCtx, cancel := context.WithTimeout(
 			context.Background(),
-			cfg.HandlerTimeout+cfg.AckTimeout,
+			settlementTimeout,
 		)
 		defer cancel()
 
