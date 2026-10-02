@@ -84,6 +84,23 @@ func (t *testTracer) StartProcess(
 	}
 }
 
+type natsControlHeaderIntegrationPropagator struct{}
+
+func (natsControlHeaderIntegrationPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set(testCorrelationHeader, "must-be-dropped")
+	carrier.Set(jetstream.ExpectedStreamHeader, "WRONG_STREAM")
+}
+
+func (natsControlHeaderIntegrationPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type collidingHeaderIntegrationPropagator struct{}
 
 func (collidingHeaderIntegrationPropagator) Inject(
@@ -429,6 +446,72 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 		if tracer.processStarted.Load() == 0 || tracer.processEnded.Load() == 0 {
 			t.Fatal("process tracer lifecycle was not invoked")
+		}
+	})
+
+	t.Run("propagation cannot inject NATS publish controls", func(t *testing.T) {
+		const subject = "template.events.propagation-nats-control"
+		const msgID = "propagation-nats-control-1"
+
+		hookClient, err := messaging.Open(
+			messaging.ClientConfig{
+				URL:            natsURL,
+				Name:           "go-template-propagation-nats-control",
+				ConnectTimeout: 2 * time.Second,
+				ReconnectWait:  100 * time.Millisecond,
+				MaxReconnects:  5,
+				DrainTimeout:   3 * time.Second,
+				RequestTimeout: 2 * time.Second,
+			},
+			messaging.WithPropagator(natsControlHeaderIntegrationPropagator{}),
+		)
+		if err != nil {
+			t.Fatalf("open NATS-control nats client: %v", err)
+		}
+		t.Cleanup(func() {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := hookClient.Drain(drainCtx); err != nil {
+				t.Errorf("drain NATS-control nats client: %v", err)
+			}
+		})
+
+		rawConn, err := nats.Connect(natsURL)
+		if err != nil {
+			t.Fatalf("open NATS-control subscriber: %v", err)
+		}
+		t.Cleanup(rawConn.Close)
+		sub, err := rawConn.SubscribeSync(subject)
+		if err != nil {
+			t.Fatalf("subscribe NATS-control subject: %v", err)
+		}
+		if err := rawConn.Flush(); err != nil {
+			t.Fatalf("flush NATS-control subscription: %v", err)
+		}
+
+		ack, err := hookClient.Publish(ctx, subject, msgID, []byte("business"))
+		if err != nil {
+			t.Fatalf("publish with staged NATS control header: %v", err)
+		}
+		if ack.Duplicate {
+			t.Fatal("first NATS-control publish unexpectedly marked duplicate")
+		}
+
+		received, err := sub.NextMsg(5 * time.Second)
+		if err != nil {
+			t.Fatalf("receive NATS-control message: %v", err)
+		}
+		if got := received.Header.Get(jetstream.ExpectedStreamHeader); got != "" {
+			t.Fatalf("expected-stream control header = %q, want dropped", got)
+		}
+		if got := received.Header.Get(testCorrelationHeader); got != "" {
+			t.Fatalf("staged propagation header = %q, want dropped", got)
+		}
+		if got := received.Header.Get(jetstream.MsgIDHeader); got != msgID {
+			t.Fatalf("message ID = %q, want %q", got, msgID)
+		}
+		if got := string(received.Data); got != "business" {
+			t.Fatalf("payload = %q, want business", got)
 		}
 	})
 
