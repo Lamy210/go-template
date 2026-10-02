@@ -128,6 +128,41 @@ func TestOutboxTextConstraintsUseByteLength(t *testing.T) {
 	}
 }
 
+func TestOutboxEventIDConstraintMatchesCanonicalText(t *testing.T) {
+	pool, ctx := openTestPool(t)
+
+	for _, eventID := range []string{
+		" event-1",
+		"event-1 ",
+		"\tevent-1",
+		"event-1\t",
+		"event\n1",
+		"event\r1",
+	} {
+		if _, err := pool.Exec(
+			ctx,
+			`INSERT INTO outbox_events (event_id, subject, payload)
+			 VALUES ($1, 'events.test', ''::bytea)`,
+			eventID,
+		); err == nil {
+			t.Fatalf("insert with non-canonical event ID %q succeeded", eventID)
+		}
+	}
+
+	const validInternalTab = "event\t1"
+	if _, err := pool.Exec(
+		ctx,
+		`INSERT INTO outbox_events (event_id, subject, payload)
+		 VALUES ($1, 'events.test', ''::bytea)`,
+		validInternalTab,
+	); err != nil {
+		t.Fatalf("insert with canonical internal TAB event ID: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM outbox_events WHERE event_id = $1", validInternalTab)
+	})
+}
+
 func TestDatabaseCloseHonorsDeadlineWithAcquiredConnection(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
