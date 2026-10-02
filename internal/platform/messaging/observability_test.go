@@ -45,6 +45,23 @@ func (p extractedContextPropagator) Extract(
 	return p.ctx
 }
 
+type invalidHeaderKeyPropagator struct{}
+
+func (invalidHeaderKeyPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set("traceparent", "valid-staged-value")
+	carrier.Set("invalid:header", "must-not-escape")
+}
+
+func (invalidHeaderKeyPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type partialPanickingPropagator struct{}
 
 func (partialPanickingPropagator) Inject(
@@ -103,6 +120,51 @@ func (panickingFinishTracer) StartProcess(
 ) (context.Context, func(error)) {
 	return context.WithValue(ctx, observabilityContextKey{}, "process"), func(error) {
 		panic("sensitive process finish panic")
+	}
+}
+
+func TestValidNATSHeaderKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{key: "traceparent", want: true},
+		{key: "X_Test[1]", want: true},
+		{key: "!", want: true},
+		{key: "~", want: true},
+		{key: "", want: false},
+		{key: "bad:key", want: false},
+		{key: "bad key", want: false},
+		{key: "bad\tkey", want: false},
+		{key: string([]byte{0x7f}), want: false},
+		{key: "非ASCII", want: false},
+	}
+	for _, tt := range tests {
+		if got := validNATSHeaderKey(tt.key); got != tt.want {
+			t.Fatalf("validNATSHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestInjectPropagationSafelyDropsAllStagedHeadersForInvalidKey(t *testing.T) {
+	t.Parallel()
+
+	header := nats.Header{}
+	header.Set("X-Business", "keep")
+	client := &Client{propagator: invalidHeaderKeyPropagator{}}
+
+	client.injectPropagationSafely(context.Background(), header)
+
+	if got := header.Get("X-Business"); got != "keep" {
+		t.Fatalf("business header = %q, want keep", got)
+	}
+	if got := header.Get("traceparent"); got != "" {
+		t.Fatalf("valid staged header escaped invalid propagation set: %q", got)
+	}
+	if _, ok := header["invalid:header"]; ok {
+		t.Fatal("invalid propagation header escaped staged set")
 	}
 }
 
