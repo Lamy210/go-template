@@ -854,6 +854,23 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects AckWait without quarantine publish budget", func(t *testing.T) {
+		cfg := workerConfig(stream, "settlement-budget-worker", "template.events.settlement-budget")
+		cfg.AckWait = 4 * time.Second
+
+		err := client.RunConsumer(
+			ctx,
+			cfg,
+			func(context.Context, messaging.Message) error { return nil },
+		)
+		if err == nil {
+			t.Fatal("RunConsumer() error = nil, want full settlement budget error")
+		}
+		if !strings.Contains(err.Error(), "publish timeout") {
+			t.Fatalf("RunConsumer() error = %q, want publish-timeout budget error", err.Error())
+		}
+	})
+
 	t.Run("handler deadline nil return retries", func(t *testing.T) {
 		const subject = "template.events.deadline"
 		var attempts atomic.Int32
@@ -865,7 +882,7 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 			cfg := workerConfig(stream, "deadline-worker", subject)
 			cfg.HandlerTimeout = 100 * time.Millisecond
 			cfg.AckTimeout = 100 * time.Millisecond
-			cfg.AckWait = time.Second
+			cfg.AckWait = 3 * time.Second
 			cfg.RetryDelay = 50 * time.Millisecond
 			errCh <- client.RunConsumer(
 				consumerCtx,
@@ -1203,7 +1220,7 @@ func workerConfig(stream messaging.StreamConfig, durable, filter string) messagi
 		Durable:            durable,
 		FilterSubject:      filter,
 		QuarantineSubject:  "template.events.quarantine",
-		AckWait:            3 * time.Second,
+		AckWait:            5 * time.Second,
 		ProcessAttempts:    2,
 		QuarantineAttempts: 2,
 		MaxAckPending:      8,
