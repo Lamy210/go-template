@@ -378,8 +378,8 @@ func invokeHandler(ctx context.Context, handler Handler, msg Message) (err error
 }
 
 func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
-	if cfg.ProcessAttempts < 0 || cfg.QuarantineAttempts < 0 {
-		return 0, 0, fmt.Errorf("consumer delivery attempts must not be negative")
+	if cfg.ProcessAttempts <= 0 || cfg.QuarantineAttempts <= 0 {
+		return 0, 0, fmt.Errorf("consumer delivery attempts must be positive")
 	}
 
 	processAttempts := uint64(cfg.ProcessAttempts)
