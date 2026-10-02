@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/httpmethod"
@@ -52,6 +53,23 @@ type ResourceConfig struct {
 	Environment string
 }
 
+// Validate enforces the textual resource identity required by OTLP/protobuf.
+func (c ResourceConfig) Validate() error {
+	if strings.TrimSpace(c.ServiceName) == "" {
+		return fmt.Errorf("telemetry service name must not be empty")
+	}
+	if !utf8.ValidString(c.ServiceName) {
+		return fmt.Errorf("telemetry service name must be valid UTF-8")
+	}
+	if !utf8.ValidString(c.Version) {
+		return fmt.Errorf("telemetry service version must be valid UTF-8")
+	}
+	if !utf8.ValidString(c.Environment) {
+		return fmt.Errorf("telemetry environment must be valid UTF-8")
+	}
+	return nil
+}
+
 // Provider owns the trace/metric SDK lifecycle and HTTP instrumentation.
 type Provider struct {
 	tracerProvider *sdktrace.TracerProvider
@@ -75,8 +93,8 @@ func Open(
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(resourceCfg.ServiceName) == "" {
-		return nil, fmt.Errorf("telemetry service name must not be empty")
+	if err := resourceCfg.Validate(); err != nil {
+		return nil, err
 	}
 	if logger == nil {
 		logger = slog.Default()

@@ -52,6 +52,60 @@ func TestConfigRejectsNonFiniteSampleRatio(t *testing.T) {
 	}
 }
 
+func TestOpenRejectsInvalidUTF8ResourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	base := ResourceConfig{
+		ServiceName: "example-service",
+		Version:     "dev",
+		Environment: "test",
+	}
+	tests := []struct {
+		name   string
+		mutate func(*ResourceConfig)
+	}{
+		{
+			name: "service name",
+			mutate: func(cfg *ResourceConfig) {
+				cfg.ServiceName = "service-" + string([]byte{0xff})
+			},
+		},
+		{
+			name: "version",
+			mutate: func(cfg *ResourceConfig) {
+				cfg.Version = "version-" + string([]byte{0xc3, 0x28})
+			},
+		},
+		{
+			name: "environment",
+			mutate: func(cfg *ResourceConfig) {
+				cfg.Environment = string([]byte{0xff})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			resourceCfg := base
+			tt.mutate(&resourceCfg)
+			provider, err := Open(
+				context.Background(),
+				testConfig(),
+				resourceCfg,
+				nil,
+			)
+			if provider != nil {
+				t.Fatal("Open() provider != nil for invalid resource identity")
+			}
+			if err == nil {
+				t.Fatal("Open() error = nil, want invalid UTF-8 resource error")
+			}
+		})
+	}
+}
+
 func TestOperationErrorRetainsCauseWithoutExposingIt(t *testing.T) {
 	t.Parallel()
 

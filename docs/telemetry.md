@@ -81,6 +81,10 @@ The provider attaches stable semantic-convention attributes:
 - `service.version`;
 - `deployment.environment.name`.
 
+All resource identity strings must be valid UTF-8 before exporter construction.
+This prevents malformed Go strings from reaching OTLP/protobuf string fields and
+turning a deterministic configuration defect into an asynchronous export error.
+
 ## HTTP instrumentation
 
 The application passes the telemetry middleware into the HTTP adapter as an

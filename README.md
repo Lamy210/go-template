@@ -51,7 +51,7 @@ See [docs/core.md](docs/core.md) for ownership and helper rules.
 
 Configuration is read once at startup from environment variables. See `.env.example` for supported values.
 
-`SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`.
+`SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`. Process identity values (`SERVICE_NAME` and `APP_ENV`) must be valid UTF-8 because they also cross telemetry and transport text boundaries.
 
 `DATABASE_ENABLED=false`, `NATS_ENABLED=false`, `TELEMETRY_ENABLED=false`, and `OUTBOX_DISPATCH_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
