@@ -68,3 +68,8 @@ func validNATSHeaderKey(key string) bool {
 	}
 	return true
 }
+
+func natsControlHeaderKey(key string) bool {
+	const prefix = "Nats-"
+	return len(key) >= len(prefix) && strings.EqualFold(key[:len(prefix)], prefix)
+}

@@ -45,6 +45,23 @@ func (p extractedContextPropagator) Extract(
 	return p.ctx
 }
 
+type natsControlHeaderPropagator struct{}
+
+func (natsControlHeaderPropagator) Inject(
+	_ context.Context,
+	carrier coreprop.TextMapCarrier,
+) {
+	carrier.Set("traceparent", "must-be-dropped")
+	carrier.Set("Nats-Expected-Stream", "WRONG_STREAM")
+}
+
+func (natsControlHeaderPropagator) Extract(
+	ctx context.Context,
+	_ coreprop.TextMapCarrier,
+) context.Context {
+	return ctx
+}
+
 type collidingHeaderPropagator struct{}
 
 func (collidingHeaderPropagator) Inject(
@@ -162,6 +179,47 @@ func TestValidNATSHeaderKey(t *testing.T) {
 		if got := validNATSHeaderKey(tt.key); got != tt.want {
 			t.Fatalf("validNATSHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
 		}
+	}
+}
+
+func TestNATSControlHeaderKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{key: "Nats-Msg-Id", want: true},
+		{key: "nAtS-Expected-Stream", want: true},
+		{key: "Nats-Schedule", want: true},
+		{key: "Nats", want: false},
+		{key: "X-Nats-Msg-Id", want: false},
+		{key: "traceparent", want: false},
+	}
+	for _, tt := range tests {
+		if got := natsControlHeaderKey(tt.key); got != tt.want {
+			t.Fatalf("natsControlHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestInjectPropagationSafelyDropsNATSControlHeaders(t *testing.T) {
+	t.Parallel()
+
+	header := nats.Header{}
+	header.Set("X-Business", "keep")
+	client := &Client{propagator: natsControlHeaderPropagator{}}
+
+	client.injectPropagationSafely(context.Background(), header)
+
+	if got := header.Get("X-Business"); got != "keep" {
+		t.Fatalf("business header = %q, want keep", got)
+	}
+	if got := header.Get("traceparent"); got != "" {
+		t.Fatalf("non-control staged header escaped control set: %q", got)
+	}
+	if got := header.Get("Nats-Expected-Stream"); got != "" {
+		t.Fatalf("NATS control header escaped staged set: %q", got)
 	}
 }
 

@@ -136,9 +136,10 @@ continues. Tracer-returned and extracted propagation values are visible to
 propagation and spans, but caller deadlines, cancellation, and cancellation cause
 remain business-owned. Propagation injection is staged so a failed hook cannot
 partially mutate outbound NATS headers. A staged set containing a NATS-invalid
-header key or colliding with an existing business/transport header is discarded
-rather than allowed to fail or alter the business publish. If propagation
-metadata alone causes publish-size preflight to fail, only those
+header key, using the adapter-reserved `Nats-*` transport-control namespace,
+or colliding with an existing business/transport header is discarded rather
+than allowed to fail or alter the business publish. If propagation metadata
+alone causes publish-size preflight to fail, only those
 staged observability headers are rolled back while
 business headers, message ID, and payload remain authoritative.
 
