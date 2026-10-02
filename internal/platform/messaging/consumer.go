@@ -33,6 +33,8 @@ func (handlerPanicError) Error() string {
 	return "messaging handler panicked"
 }
 
+const serialConsumerPullBatchSize = 1
+
 // ErrConsumerConfigDrift means an existing durable consumer differs in one or
 // more fields managed by this template.
 var ErrConsumerConfigDrift = errors.New("managed jetstream consumer configuration differs")
@@ -149,7 +151,10 @@ func (c *Client) RunConsumer(ctx context.Context, cfg ConsumerConfig, handler Ha
 				reportFatal,
 			)
 		},
-		jetstream.PullMaxMessages(cfg.MaxAckPending),
+		// Consume invokes this callback serially. Pull one delivery at a time so
+		// AckWait does not elapse while later messages sit in the client buffer.
+		// MaxAckPending remains the broker-side safety cap on the durable.
+		jetstream.PullMaxMessages(serialConsumerPullBatchSize),
 		jetstream.PullExpiry(cfg.PullExpiry),
 		jetstream.ConsumeErrHandler(func(_ jetstream.ConsumeContext, err error) {
 			reportFatal(newOperationError("consume jetstream messages", err))

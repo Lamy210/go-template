@@ -26,7 +26,8 @@ created when missing, but an existing durable is never updated implicitly by
 - explicit acknowledgements;
 - finite processing attempts;
 - finite quarantine-publish attempts;
-- finite `MaxAckPending`;
+- finite `MaxAckPending` as a broker-side safety cap;
+- one-message local pull batches while handler execution is serial;
 - bounded handler, publish, and ack timeouts;
 - `AckWait` strictly greater than `HandlerTimeout + RequestTimeout + AckTimeout`;
 - delayed retry rather than immediate hot-loop redelivery.
@@ -39,6 +40,14 @@ handler execution, a synchronous quarantine publish bounded by
 `AckWait=45s`, `HandlerTimeout=30s`, `RequestTimeout=5s`, and
 `AckTimeout=5s`, leaving 5 seconds of scheduling/network slack. Invalid
 combinations fail validation before the consumer starts.
+
+`RunConsumer` currently executes one handler callback at a time. Its local pull
+batch is therefore fixed at one message even when the durable consumer's
+`MaxAckPending` cap is higher. This prevents the broker's acknowledgement clock
+from running down while later deliveries wait in the client callback buffer.
+Adding parallel handler execution in the future must couple pull concurrency,
+shutdown coordination, and `MaxAckPending` explicitly rather than increasing
+prefetch alone.
 
 JetStream streams are created with finite message count, byte, age, consumer,
 and single-message-size limits. The template never relies on JetStream's
@@ -275,6 +284,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - bounded failure followed by quarantine with propagation preserved;
 - exact process/quarantine delivery budgeting without an extra quarantine attempt;
 - full handler/publish/ack settlement budgeting inside `AckWait`;
+- serial pull behavior that does not prefetch later deliveries into an expiring AckWait window;
 - consumer drain on cancellation using that full acknowledgement window;
 - NATS/JetStream readiness while the required stream exists with the managed configuration;
 - startup provisioning refuses managed drift without auto-reconciling it;

@@ -854,6 +854,128 @@ func TestJetStreamDedupRetryQuarantineAndDrain(t *testing.T) {
 		}
 	})
 
+	t.Run("serial consumer does not prefetch past active handler", func(t *testing.T) {
+		const subject = "template.events.serial-prefetch"
+
+		serialClient, err := messaging.Open(messaging.ClientConfig{
+			URL:            natsURL,
+			Name:           "go-template-serial-prefetch",
+			ConnectTimeout: 2 * time.Second,
+			ReconnectWait:  100 * time.Millisecond,
+			MaxReconnects:  5,
+			DrainTimeout:   3 * time.Second,
+			RequestTimeout: 500 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatalf("open serial-prefetch client: %v", err)
+		}
+		t.Cleanup(func() {
+			drainCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := serialClient.Drain(drainCtx); err != nil {
+				t.Errorf("drain serial-prefetch client: %v", err)
+			}
+		})
+
+		type observedDelivery struct {
+			payload      string
+			numDelivered uint64
+		}
+		deliveries := make(chan observedDelivery, 32)
+		consumerCtx, stop := context.WithCancel(ctx)
+		errCh := make(chan error, 1)
+		go func() {
+			cfg := workerConfig(stream, "serial-prefetch-worker", subject)
+			cfg.AckWait = 900 * time.Millisecond
+			cfg.MaxAckPending = 8
+			cfg.HandlerTimeout = 200 * time.Millisecond
+			cfg.AckTimeout = 100 * time.Millisecond
+			errCh <- serialClient.RunConsumer(
+				consumerCtx,
+				cfg,
+				func(handlerCtx context.Context, msg messaging.Message) error {
+					timer := time.NewTimer(150 * time.Millisecond)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+					case <-handlerCtx.Done():
+						return handlerCtx.Err()
+					}
+					deliveries <- observedDelivery{
+						payload:      string(msg.Data),
+						numDelivered: msg.NumDelivered,
+					}
+					return nil
+				},
+			)
+		}()
+
+		messageIDs := []string{
+			"serial-prefetch-1",
+			"serial-prefetch-2",
+			"serial-prefetch-3",
+			"serial-prefetch-4",
+			"serial-prefetch-5",
+			"serial-prefetch-6",
+			"serial-prefetch-7",
+			"serial-prefetch-8",
+		}
+		for _, messageID := range messageIDs {
+			if _, err := serialClient.Publish(ctx, subject, messageID, []byte(messageID)); err != nil {
+				stop()
+				t.Fatalf("publish %s: %v", messageID, err)
+			}
+		}
+
+		seen := make(map[string]struct{}, len(messageIDs))
+		deadline := time.NewTimer(5 * time.Second)
+		defer deadline.Stop()
+		for len(seen) < len(messageIDs) {
+			select {
+			case delivery := <-deliveries:
+				if delivery.numDelivered != 1 {
+					stop()
+					t.Fatalf(
+						"delivery %q NumDelivered = %d, want first delivery",
+						delivery.payload,
+						delivery.numDelivered,
+					)
+				}
+				seen[delivery.payload] = struct{}{}
+			case err := <-errCh:
+				stop()
+				t.Fatalf("serial-prefetch consumer stopped early: %v", err)
+			case <-deadline.C:
+				stop()
+				t.Fatalf("timed out after %d/%d unique deliveries", len(seen), len(messageIDs))
+			}
+		}
+
+		select {
+		case delivery := <-deliveries:
+			stop()
+			t.Fatalf(
+				"unexpected redelivery after unique set completed: payload=%q delivered=%d",
+				delivery.payload,
+				delivery.numDelivered,
+			)
+		case err := <-errCh:
+			stop()
+			t.Fatalf("serial-prefetch consumer stopped early: %v", err)
+		case <-time.After(time.Second):
+		}
+
+		stop()
+		select {
+		case err := <-errCh:
+			if err != nil {
+				t.Fatalf("serial-prefetch consumer shutdown: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("serial-prefetch consumer did not drain")
+		}
+	})
+
 	t.Run("handler deadline nil return retries", func(t *testing.T) {
 		const subject = "template.events.deadline"
 		var attempts atomic.Int32
