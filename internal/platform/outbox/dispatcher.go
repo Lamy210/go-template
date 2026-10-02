@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
+	"math"
 	"strconv"
 	"time"
 
@@ -78,8 +79,8 @@ func (c DispatcherConfig) Validate() error {
 	if c.Lease < time.Microsecond || c.Lease > maxClaimLease {
 		return errors.New("outbox dispatcher lease must be between one microsecond and 24 hours")
 	}
-	if c.MaxAttempts <= 0 {
-		return errors.New("outbox dispatcher max attempts must be positive")
+	if c.MaxAttempts <= 0 || c.MaxAttempts > math.MaxInt32 {
+		return errors.New("outbox dispatcher max attempts must be between 1 and PostgreSQL INTEGER max")
 	}
 	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
 		return errors.New("outbox dispatcher retry delays must be at least one microsecond")

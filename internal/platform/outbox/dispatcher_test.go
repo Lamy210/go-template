@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -598,6 +600,32 @@ func TestDispatcherCancellationDoesNotHideSettlementFailure(t *testing.T) {
 	}
 	if got := err.Error(); got != "release canceled outbox event" {
 		t.Fatalf("Run() error text = %q", got)
+	}
+}
+
+func TestDispatcherConfigMaxAttemptsMatchesPostgresInteger(t *testing.T) {
+	t.Parallel()
+
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          10 * time.Second,
+		MaxAttempts:    math.MaxInt32,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  time.Second,
+		PublishTimeout: time.Second,
+		StoreTimeout:   time.Second,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() at PostgreSQL INTEGER max = %v", err)
+	}
+
+	if strconv.IntSize > 32 {
+		tooMany := int64(math.MaxInt32) + 1
+		cfg.MaxAttempts = int(tooMany)
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("Validate() error = nil above PostgreSQL INTEGER max")
+		}
 	}
 }
 

@@ -149,7 +149,7 @@ The default dispatcher bounds are:
 - batch size: 8;
 - poll interval: 500ms;
 - lease: 30s;
-- max attempts: 10;
+- max attempts: 10, bounded by PostgreSQL `INTEGER` max;
 - retry base delay: 1s;
 - retry max delay: 1m;
 - publish timeout: 5s;
@@ -187,6 +187,12 @@ For a normal publish failure:
    retries use deterministic per-event jitter in the final 25% of the current
    envelope (75-100% of the envelope);
 3. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
+
+`OUTBOX_DISPATCH_MAX_ATTEMPTS` may not exceed PostgreSQL `INTEGER` max
+(2,147,483,647), because each claim increments the durable `attempts INTEGER`
+column before dispatch. Rejecting larger Go `int` values prevents a configured
+retry budget from outliving the database representation and failing with an
+integer overflow during claim.
 
 The jitter key is the stable `event_id` plus attempt number. It requires no
 process-global RNG, is reproducible across restarts, and spreads different

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"math"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -133,6 +135,25 @@ func TestOutboxValidateRejectsUnsafeBounds(t *testing.T) {
 				t.Fatal("Validate() error = nil, want error")
 			}
 		})
+	}
+}
+
+func TestOutboxValidateMaxAttemptsMatchesPostgresInteger(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultOutboxConfig()
+	cfg.Enabled = true
+	cfg.MaxAttempts = math.MaxInt32
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() at PostgreSQL INTEGER max = %v", err)
+	}
+
+	if strconv.IntSize > 32 {
+		tooMany := int64(math.MaxInt32) + 1
+		cfg.MaxAttempts = int(tooMany)
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("Validate() error = nil above PostgreSQL INTEGER max")
+		}
 	}
 }
 

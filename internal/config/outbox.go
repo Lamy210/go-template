@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/Lamy210/go-template/internal/outboxbudget"
@@ -170,8 +171,8 @@ func (c OutboxConfig) Validate() error {
 	if c.Lease < time.Microsecond || c.Lease > 24*time.Hour {
 		return fmt.Errorf("OUTBOX_DISPATCH_LEASE must be between one microsecond and 24h")
 	}
-	if c.MaxAttempts <= 0 {
-		return fmt.Errorf("OUTBOX_DISPATCH_MAX_ATTEMPTS must be positive")
+	if c.MaxAttempts <= 0 || c.MaxAttempts > math.MaxInt32 {
+		return fmt.Errorf("OUTBOX_DISPATCH_MAX_ATTEMPTS must be between 1 and PostgreSQL INTEGER max")
 	}
 	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
 		return fmt.Errorf("outbox dispatcher retry delays must be at least one microsecond")
