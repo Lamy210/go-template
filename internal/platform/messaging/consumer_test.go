@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +65,91 @@ func TestInvokeHandlerTreatsExpiredContextAsFailure(t *testing.T) {
 	)
 	if !errors.Is(got, context.DeadlineExceeded) {
 		t.Fatalf("invokeHandler() error = %v, want deadline exceeded", got)
+	}
+}
+
+func TestDeliveryAttemptLimitsCountFinalProcessingDeliveryAsFirstQuarantineAttempt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		processAttempts   int
+		quarantineAttempts int
+		wantTotal         uint64
+	}{
+		{
+			name:               "single quarantine attempt needs no extra delivery",
+			processAttempts:    1,
+			quarantineAttempts: 1,
+			wantTotal:          1,
+		},
+		{
+			name:               "two quarantine attempts need one extra delivery",
+			processAttempts:    3,
+			quarantineAttempts: 2,
+			wantTotal:          4,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			process, total, err := deliveryAttemptLimits(ConsumerConfig{
+				ProcessAttempts:    tt.processAttempts,
+				QuarantineAttempts: tt.quarantineAttempts,
+			})
+			if err != nil {
+				t.Fatalf("deliveryAttemptLimits() error = %v", err)
+			}
+			if process != uint64(tt.processAttempts) {
+				t.Fatalf("process attempts = %d, want %d", process, tt.processAttempts)
+			}
+			if total != tt.wantTotal {
+				t.Fatalf("total deliveries = %d, want %d", total, tt.wantTotal)
+			}
+		})
+	}
+}
+
+func TestDeliveryAttemptLimitsRejectsNonPositiveAttempts(t *testing.T) {
+	t.Parallel()
+
+	for _, cfg := range []ConsumerConfig{
+		{ProcessAttempts: 0, QuarantineAttempts: 1},
+		{ProcessAttempts: 1, QuarantineAttempts: 0},
+	} {
+		if _, _, err := deliveryAttemptLimits(cfg); err == nil {
+			t.Fatalf("deliveryAttemptLimits(%+v) error = nil", cfg)
+		}
+	}
+}
+
+func TestConsumerConfigAttemptOverflowMatchesEffectiveMaxDeliver(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.ProcessAttempts = math.MaxInt
+	cfg.QuarantineAttempts = 1
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() with MaxInt process and one quarantine attempt = %v", err)
+	}
+
+	cfg.QuarantineAttempts = 2
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() overflow error = nil")
+	}
+}
+
+func TestManagedConsumerConfigUsesExactAttemptBudget(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.ProcessAttempts = 3
+	cfg.QuarantineAttempts = 2
+
+	got := managedConsumerConfig(cfg)
+	if got.MaxDeliver != 4 {
+		t.Fatalf("MaxDeliver = %d, want 4", got.MaxDeliver)
 	}
 }
 
