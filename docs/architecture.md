@@ -60,6 +60,12 @@ its goroutine and terminating the process. Readiness checks are required to hono
 context cancellation; Go cannot forcibly terminate an arbitrary stuck goroutine,
 so cancellation compliance is part of the adapter contract.
 
+Build metadata is validated once at the composition boundary before any
+logger, HTTP response, or telemetry resource consumes it. Linker-injected
+version, commit, and build-date values must be non-empty valid UTF-8 so optional
+profiles cannot change the process identity by normalizing malformed text
+differently.
+
 Request correlation is also treated as an HTTP trust boundary. Client-supplied
 `X-Request-Id` values are accepted only when they are bounded visible ASCII.
 Oversized or malformed values are discarded and the HTTP adapter generates a

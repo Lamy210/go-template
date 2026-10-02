@@ -29,6 +29,9 @@ func Run(ctx context.Context) error {
 	}
 
 	info := buildinfo.Current()
+	if err := info.Validate(); err != nil {
+		return fmt.Errorf("validate build metadata: %w", err)
+	}
 	logger, err := newLogger(os.Stdout, cfg.LogLevel, cfg.ServiceName, cfg.Environment, info)
 	if err != nil {
 		return fmt.Errorf("create logger: %w", err)

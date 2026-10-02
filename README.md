@@ -132,7 +132,7 @@ make build \
   BUILD_DATE=2026-09-27T00:00:00Z
 ```
 
-The Docker build accepts the same values via `VERSION`, `COMMIT`, and `BUILD_DATE` build arguments. Defaults are deterministic placeholders (`dev` / `unknown`) rather than a generated wall-clock timestamp.
+The Docker build accepts the same values via `VERSION`, `COMMIT`, and `BUILD_DATE` build arguments. Defaults are deterministic placeholders (`dev` / `unknown`) rather than a generated wall-clock timestamp. Linker-injected version, commit, and build-date values must be non-empty valid UTF-8; malformed metadata fails startup before logging, HTTP, or telemetry can normalize it differently.
 
 ## Quality gates
 
