@@ -7,7 +7,12 @@ CREATE TABLE example_items (
 CREATE TABLE outbox_events (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id TEXT NOT NULL UNIQUE
-        CHECK (octet_length(event_id) BETWEEN 1 AND 128),
+        CHECK (
+            octet_length(event_id) BETWEEN 1 AND 128
+            AND event_id = btrim(event_id, E' \t\r\n')
+            AND position(E'\r' in event_id) = 0
+            AND position(E'\n' in event_id) = 0
+        ),
     subject TEXT NOT NULL
         CHECK (octet_length(subject) BETWEEN 1 AND 255),
     payload BYTEA NOT NULL
