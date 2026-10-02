@@ -243,6 +243,9 @@ func verifyManagedConsumer(
 }
 
 func managedConsumerConfig(cfg ConsumerConfig) jetstream.ConsumerConfig {
+	// The last processing delivery also performs quarantine attempt 1 after a
+	// handler failure, so only QuarantineAttempts-1 additional deliveries are
+	// needed for the quarantine phase.
 	return jetstream.ConsumerConfig{
 		Durable:       cfg.Durable,
 		DeliverPolicy: jetstream.DeliverAllPolicy,
@@ -384,6 +387,7 @@ func deliveryAttemptLimits(cfg ConsumerConfig) (uint64, uint64, error) {
 
 	processAttempts := uint64(cfg.ProcessAttempts)
 	quarantineAttempts := uint64(cfg.QuarantineAttempts)
+	// The final handler delivery is also the first quarantine-publish attempt.
 	return processAttempts, processAttempts + quarantineAttempts - 1, nil
 }
 
