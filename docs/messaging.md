@@ -82,6 +82,12 @@ separators, and non-printable characters such as NUL are rejected locally
 instead of surfacing as server-side provisioning failures. Valid printable
 Unicode names remain supported.
 
+Configured stream subject patterns must also be unique by exact,
+case-sensitive text. The pinned NATS server rejects exact duplicates during
+stream provisioning, so the template fails that deterministic configuration
+error locally. Distinct patterns are still allowed to overlap; for example,
+`events.*` and `events.>` are not treated as duplicates.
+
 The application does not register a fake business consumer. Consumer handlers
 belong to a feature/application package and call `RunConsumer` with the
 durable/filter policy they own. This keeps the NATS profile reusable and

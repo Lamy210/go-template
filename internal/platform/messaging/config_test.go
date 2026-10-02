@@ -261,6 +261,21 @@ func TestStreamConfigRejectsInvalidSubjectPattern(t *testing.T) {
 	}
 }
 
+func TestStreamConfigRejectsDuplicateSubjects(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig().Stream
+	cfg.Subjects = []string{"events.>", "jobs.>", "events.>"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want duplicate stream subject error")
+	}
+
+	cfg.Subjects = []string{"events.*", "events.>"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() rejected distinct overlapping subjects: %v", err)
+	}
+}
+
 func TestConsumerConfigRejectsFilterOutsideStreamSubjects(t *testing.T) {
 	t.Parallel()
 

@@ -25,6 +25,19 @@ func ValidateLiteral(subject string) error {
 	return validate(subject, false)
 }
 
+// HasDuplicatePatterns reports whether the list contains an exact duplicate.
+// NATS subjects are case-sensitive, so case-distinct patterns remain distinct.
+func HasDuplicatePatterns(patterns []string) bool {
+	seen := make(map[string]struct{}, len(patterns))
+	for _, pattern := range patterns {
+		if _, exists := seen[pattern]; exists {
+			return true
+		}
+		seen[pattern] = struct{}{}
+	}
+	return false
+}
+
 // PatternContainsPattern reports whether every subject matched by candidate is
 // also matched by container. Both arguments must already satisfy ValidatePattern.
 func PatternContainsPattern(container, candidate string) bool {

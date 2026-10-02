@@ -41,6 +41,9 @@ func (c StreamConfig) Validate() error {
 			return fmt.Errorf("stream subject pattern is invalid: %w", err)
 		}
 	}
+	if natssubject.HasDuplicatePatterns(c.Subjects) {
+		return fmt.Errorf("stream subjects must not contain duplicates")
+	}
 	if c.MaxConsumers <= 0 || c.MaxMessages <= 0 || c.MaxBytes <= 0 || c.MaxMessageSize <= 0 {
 		return fmt.Errorf("stream limits must be positive")
 	}
