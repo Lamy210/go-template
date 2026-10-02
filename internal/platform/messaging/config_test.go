@@ -326,6 +326,32 @@ func TestConsumerConfigAcceptsFilterCoveredByAnyStreamSubject(t *testing.T) {
 	}
 }
 
+func TestConsumerConfigRejectsQuarantineOutsideStreamSubjects(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.Stream.Subjects = []string{"events.work"}
+	cfg.FilterSubject = "events.work"
+	cfg.QuarantineSubject = "dead.quarantine"
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want uncovered quarantine subject error")
+	}
+}
+
+func TestConsumerConfigAcceptsQuarantineCoveredByAnotherStreamSubject(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConsumerConfig()
+	cfg.Stream.Subjects = []string{"events.work", "dead.>"}
+	cfg.FilterSubject = "events.work"
+	cfg.QuarantineSubject = "dead.quarantine"
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func TestConsumerConfigRejectsQuarantineRecapture(t *testing.T) {
 	t.Parallel()
 
