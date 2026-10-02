@@ -137,6 +137,12 @@ func (c *Client) injectPropagationSafely(ctx context.Context, header nats.Header
 			// otherwise valid business message fail NATS header serialization.
 			return
 		}
+		if target.Has(key) {
+			// Existing message headers are business/transport state. Never let
+			// optional propagation overwrite message identity or quarantine
+			// metadata; discard the complete staged set to avoid a mixed trace.
+			return
+		}
 	}
 	for _, key := range keys {
 		target.Set(key, stagedCarrier.Get(key))
