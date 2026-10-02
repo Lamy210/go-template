@@ -7,15 +7,15 @@ CREATE TABLE example_items (
 CREATE TABLE outbox_events (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id TEXT NOT NULL UNIQUE
-        CHECK (char_length(event_id) BETWEEN 1 AND 128),
+        CHECK (octet_length(event_id) BETWEEN 1 AND 128),
     subject TEXT NOT NULL
-        CHECK (char_length(subject) BETWEEN 1 AND 255),
+        CHECK (octet_length(subject) BETWEEN 1 AND 255),
     payload BYTEA NOT NULL
         CHECK (octet_length(payload) <= 1048576),
     traceparent TEXT NOT NULL DEFAULT ''
-        CHECK (char_length(traceparent) <= 256),
+        CHECK (octet_length(traceparent) <= 256),
     tracestate TEXT NOT NULL DEFAULT ''
-        CHECK (char_length(tracestate) <= 512),
+        CHECK (octet_length(tracestate) <= 512),
     attempts INTEGER NOT NULL DEFAULT 0
         CHECK (attempts >= 0),
     available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
