@@ -82,3 +82,31 @@ func TestClassifyOutboxPublishErrorMarksOnlyDeterministicRejections(t *testing.T
 		t.Fatalf("nil error classified as %v", got)
 	}
 }
+
+func TestPreserveLateServeErrorJoinsConcurrentFailure(t *testing.T) {
+	t.Parallel()
+
+	runErr := errors.New("shutdown requested")
+	serveErr := errors.New("accept failed")
+	errCh := make(chan error, 1)
+	errCh <- serveErr
+
+	got := preserveLateServeError(runErr, errCh)
+	if !errors.Is(got, runErr) {
+		t.Fatalf("preserveLateServeError() lost existing run error: %v", got)
+	}
+	if !errors.Is(got, serveErr) {
+		t.Fatalf("preserveLateServeError() lost late serve error: %v", got)
+	}
+}
+
+func TestPreserveLateServeErrorLeavesRunErrorWhenChannelEmpty(t *testing.T) {
+	t.Parallel()
+
+	runErr := errors.New("shutdown requested")
+	errCh := make(chan error, 1)
+
+	if got := preserveLateServeError(runErr, errCh); got != runErr {
+		t.Fatalf("preserveLateServeError() = %v, want original run error", got)
+	}
+}
