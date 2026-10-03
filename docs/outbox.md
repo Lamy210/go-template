@@ -184,8 +184,11 @@ For a normal publish failure:
    exponentially increasing retry envelope capped by
    `OUTBOX_DISPATCH_RETRY_MAX_DELAY`;
 2. the first retry uses `OUTBOX_DISPATCH_RETRY_BASE_DELAY` exactly; later
-   retries use deterministic per-event jitter in the final 25% of the current
-   envelope (75-100% of the envelope);
+   retries normally use deterministic per-event jitter in the final 25% of the
+   current envelope (75-100% of the envelope). If the capped envelope is close
+   to the configured base, the jitter lower bound is clamped to
+   `OUTBOX_DISPATCH_RETRY_BASE_DELAY`, so a later retry is never scheduled
+   sooner than the first retry;
 3. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
 
 `OUTBOX_DISPATCH_MAX_ATTEMPTS` may not exceed PostgreSQL `INTEGER` max
@@ -198,7 +201,8 @@ The jitter key is the stable `event_id` plus attempt number. It requires no
 process-global RNG, is reproducible across restarts, and spreads different
 events that failed together instead of scheduling the entire batch for the same
 `available_at`. Jitter is quantized to PostgreSQL's microsecond interval
-precision and never exceeds the configured retry maximum.
+precision, never falls below the configured retry base delay, and never exceeds
+the configured retry maximum.
 
 Shutdown cancellation is intentionally different: an ambiguous canceled publish
 is released with the exact base delay so shutdown recovery stays prompt and
