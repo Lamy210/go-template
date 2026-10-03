@@ -432,6 +432,9 @@ func signalEndpoint(base, signal string) (string, error) {
 	if endpoint.Hostname() == "" {
 		return "", fmt.Errorf("OTLP endpoint must include a host")
 	}
+	if !validEndpointPort(endpoint) {
+		return "", fmt.Errorf("OTLP endpoint contains an invalid TCP port")
+	}
 	if endpoint.User != nil {
 		return "", fmt.Errorf("OTLP endpoint must not contain userinfo")
 	}
