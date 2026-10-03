@@ -317,6 +317,7 @@ func Run(ctx context.Context) error {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown http server: %w", err))
 	}
 	cancelHTTP()
+	runErr = preserveLateServeError(runErr, errCh)
 
 	if outboxCancel != nil {
 		outboxCancel()
@@ -385,6 +386,18 @@ func Run(ctx context.Context) error {
 
 	logger.Info("shutdown complete")
 	return nil
+}
+
+func preserveLateServeError(runErr error, errCh <-chan error) error {
+	select {
+	case err := <-errCh:
+		if err == nil {
+			return runErr
+		}
+		return errors.Join(runErr, err)
+	default:
+		return runErr
+	}
 }
 
 func classifyOutboxPublishError(err error) error {
