@@ -118,6 +118,12 @@ func TestTelemetryRejectsUnsafeBounds(t *testing.T) {
 			},
 		},
 		{
+			name: "endpoint missing hostname",
+			mutate: func(cfg *TelemetryConfig) {
+				cfg.Endpoint = "http://:4318"
+			},
+		},
+		{
 			name: "endpoint userinfo",
 			mutate: func(cfg *TelemetryConfig) {
 				cfg.Endpoint = "https://secret@collector.example.com"
