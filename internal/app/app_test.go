@@ -110,3 +110,36 @@ func TestPreserveLateServeErrorLeavesRunErrorWhenChannelEmpty(t *testing.T) {
 		t.Fatalf("preserveLateServeError() = %v, want original run error", got)
 	}
 }
+
+func TestPreserveServeErrorAfterShutdownWaitsForServeGoroutine(t *testing.T) {
+	t.Parallel()
+
+	runErr := errors.New("shutdown requested")
+	serveErr := errors.New("accept failed")
+	errCh := make(chan error, 1)
+	serveDone := make(chan struct{})
+	started := make(chan struct{})
+	result := make(chan error, 1)
+
+	go func() {
+		close(started)
+		result <- preserveServeErrorAfterShutdown(runErr, serveDone, errCh)
+	}()
+	<-started
+
+	select {
+	case got := <-result:
+		t.Fatalf("reconciliation returned before Serve completed: %v", got)
+	default:
+	}
+
+	errCh <- serveErr
+	close(serveDone)
+	got := <-result
+	if !errors.Is(got, runErr) {
+		t.Fatalf("preserveServeErrorAfterShutdown() lost existing run error: %v", got)
+	}
+	if !errors.Is(got, serveErr) {
+		t.Fatalf("preserveServeErrorAfterShutdown() lost late serve error: %v", got)
+	}
+}
