@@ -429,7 +429,7 @@ func signalEndpoint(base, signal string) (string, error) {
 	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
 		return "", fmt.Errorf("OTLP endpoint must use http or https")
 	}
-	if endpoint.Host == "" {
+	if endpoint.Hostname() == "" {
 		return "", fmt.Errorf("OTLP endpoint must include a host")
 	}
 	if endpoint.User != nil {
