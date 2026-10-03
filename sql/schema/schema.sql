@@ -14,7 +14,14 @@ CREATE TABLE outbox_events (
             AND position(E'\n' in event_id) = 0
         ),
     subject TEXT NOT NULL
-        CHECK (octet_length(subject) BETWEEN 1 AND 255),
+        CHECK (
+            octet_length(subject) BETWEEN 1 AND 255
+            AND translate(
+                subject,
+                U&'\0009\000A\000B\000C\000D\0020\0085\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000',
+                ''
+            ) <> ''
+        ),
     payload BYTEA NOT NULL
         CHECK (octet_length(payload) <= 1048576),
     traceparent TEXT NOT NULL DEFAULT ''
