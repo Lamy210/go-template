@@ -439,9 +439,16 @@ func signalEndpoint(base, signal string) (string, error) {
 		return "", fmt.Errorf("OTLP endpoint must not contain query or fragment")
 	}
 
-	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/v1/" + signal
-	if endpoint.RawPath != "" {
-		endpoint.RawPath = strings.TrimRight(endpoint.RawPath, "/") + "/v1/" + signal
+	escapedPath := strings.TrimRight(endpoint.EscapedPath(), "/") + "/v1/" + signal
+	decodedPath, err := url.PathUnescape(escapedPath)
+	if err != nil {
+		return "", newOperationError("decode OTLP endpoint path", err)
+	}
+	endpoint.Path = decodedPath
+	if escapedPath == decodedPath {
+		endpoint.RawPath = ""
+	} else {
+		endpoint.RawPath = escapedPath
 	}
 	return endpoint.String(), nil
 }
