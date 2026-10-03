@@ -24,6 +24,24 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
+			name: "address without port",
+			mutate: func(cfg *Config) {
+				cfg.Addr = "localhost"
+			},
+		},
+		{
+			name: "address with empty port",
+			mutate: func(cfg *Config) {
+				cfg.Addr = ":"
+			},
+		},
+		{
+			name: "address with surrounding whitespace",
+			mutate: func(cfg *Config) {
+				cfg.Addr = " 127.0.0.1:8080 "
+			},
+		},
+		{
 			name: "non-positive read header timeout",
 			mutate: func(cfg *Config) {
 				cfg.ReadHeaderTimeout = 0
@@ -62,7 +80,6 @@ func TestConfigValidate(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
