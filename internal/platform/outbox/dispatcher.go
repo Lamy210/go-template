@@ -389,15 +389,24 @@ func retryDelayForEvent(
 		return envelope
 	}
 
-	// Equal-ish deterministic jitter in the final 25% of the exponential
-	// envelope. Keeping the upper bound at the existing envelope preserves the
-	// configured maximum while spreading events even after exponential backoff
-	// reaches its cap.
+	// Equal-ish deterministic jitter near the top of the exponential envelope.
+	// Normally this is the final 25%. When a capped envelope is close to the
+	// configured base, clamp the lower bound so a later retry can never occur
+	// sooner than the first retry.
 	windowMicros := envelopeMicros / 4
 	if windowMicros == 0 {
 		return envelope
 	}
 	lowerMicros := envelopeMicros - windowMicros
+	baseMicros := base / time.Microsecond
+	if lowerMicros < baseMicros {
+		lowerMicros = baseMicros
+	}
+	windowMicros = envelopeMicros - lowerMicros
+	if windowMicros == 0 {
+		return envelope
+	}
+
 	const maxHash = float64(1<<32 - 1)
 	fraction := float64(retryJitterHash(eventID, attempt)) / maxHash
 	offsetMicros := time.Duration(float64(windowMicros) * fraction)
