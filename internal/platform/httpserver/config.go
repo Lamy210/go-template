@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"errors"
+	"net"
 	"strings"
 	"time"
 )
@@ -25,6 +26,13 @@ type Config struct {
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.Addr) == "" {
 		return errors.New("http address must not be empty")
+	}
+	if strings.TrimSpace(c.Addr) != c.Addr {
+		return errors.New("http address must not contain surrounding whitespace")
+	}
+	_, port, err := net.SplitHostPort(c.Addr)
+	if err != nil || port == "" {
+		return errors.New("http address must use host:port form")
 	}
 	if c.ReadHeaderTimeout <= 0 {
 		return errors.New("http read header timeout must be positive")
