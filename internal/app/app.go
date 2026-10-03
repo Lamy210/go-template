@@ -268,7 +268,9 @@ func Run(ctx context.Context) error {
 	}
 
 	errCh := make(chan error, 1)
+	serveDone := make(chan struct{})
 	go func() {
+		defer close(serveDone)
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("serve http: %w", err)
 		}
@@ -317,7 +319,7 @@ func Run(ctx context.Context) error {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown http server: %w", err))
 	}
 	cancelHTTP()
-	runErr = preserveLateServeError(runErr, errCh)
+	runErr = preserveServeErrorAfterShutdown(runErr, serveDone, errCh)
 
 	if outboxCancel != nil {
 		outboxCancel()
@@ -386,6 +388,15 @@ func Run(ctx context.Context) error {
 
 	logger.Info("shutdown complete")
 	return nil
+}
+
+func preserveServeErrorAfterShutdown(
+	runErr error,
+	serveDone <-chan struct{},
+	errCh <-chan error,
+) error {
+	<-serveDone
+	return preserveLateServeError(runErr, errCh)
 }
 
 func preserveLateServeError(runErr error, errCh <-chan error) error {
