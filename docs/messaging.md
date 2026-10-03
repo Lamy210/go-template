@@ -191,8 +191,8 @@ and propagation extraction may add context values such as span state, but they
 cannot replace the caller's deadline, cancellation lifetime, or cancellation
 cause. Propagation injection is staged in a temporary header map so a panicking
 hook cannot leave partially written trace headers on an outbound message. The
-staged set is also discarded as a whole if a propagator emits a NATS ADR-4
-invalid header key, emits a value that would be changed by nats.go header
+staged set is also discarded as a whole if a propagator emits a header key
+rejected by the pinned nats.go grammar, emits a value that would be changed by nats.go header
 serialization (invalid UTF-8, surrounding ASCII whitespace, or CR/LF), attempts
 to use the adapter-reserved `Nats-*` transport control namespace, or collides
 with an existing message header. This keeps propagation values byte-stable,
@@ -287,7 +287,7 @@ The messaging CI job starts a real JetStream-enabled nats-server and verifies:
 - message-ID deduplication;
 - header-aware publish-size preflight against managed stream limits;
 - fail-open propagation rollback when observability headers alone exceed a publish limit;
-- fail-open discard of propagation sets containing ADR-4-invalid NATS header keys;
+- fail-open discard of propagation sets containing header keys rejected by pinned nats.go;
 - fail-open discard of propagation values that nats.go would trim, rewrite, or serialize as invalid UTF-8;
 - preservation of business message identity when propagation emits colliding headers;
 - fail-open rejection of propagated `Nats-*` JetStream control headers;

@@ -103,7 +103,7 @@ func (invalidHeaderKeyPropagator) Inject(
 	carrier coreprop.TextMapCarrier,
 ) {
 	carrier.Set("traceparent", "valid-staged-value")
-	carrier.Set("invalid:header", "must-not-escape")
+	carrier.Set("invalid/header", "must-not-escape")
 }
 
 func (invalidHeaderKeyPropagator) Extract(
@@ -182,11 +182,16 @@ func TestValidNATSHeaderKey(t *testing.T) {
 		want bool
 	}{
 		{key: "traceparent", want: true},
-		{key: "X_Test[1]", want: true},
+		{key: "X_Test-1", want: true},
 		{key: "!", want: true},
 		{key: "~", want: true},
 		{key: "", want: false},
 		{key: "bad:key", want: false},
+		{key: "bad/key", want: false},
+		{key: "bad(key)", want: false},
+		{key: "bad?key", want: false},
+		{key: "bad[key]", want: false},
+		{key: "bad{key}", want: false},
 		{key: "bad key", want: false},
 		{key: "bad\tkey", want: false},
 		{key: string([]byte{0x7f}), want: false},
@@ -195,6 +200,12 @@ func TestValidNATSHeaderKey(t *testing.T) {
 	for _, tt := range tests {
 		if got := validNATSHeaderKey(tt.key); got != tt.want {
 			t.Fatalf("validNATSHeaderKey(%q) = %t, want %t", tt.key, got, tt.want)
+		}
+	}
+	for _, forbidden := range natsHeaderKeyForbidden {
+		key := "X" + string(forbidden) + "Y"
+		if validNATSHeaderKey(key) {
+			t.Fatalf("validNATSHeaderKey(%q) = true for pinned forbidden character %q", key, forbidden)
 		}
 	}
 }
@@ -338,7 +349,7 @@ func TestInjectPropagationSafelyDropsAllStagedHeadersForInvalidKey(t *testing.T)
 	if got := header.Get("traceparent"); got != "" {
 		t.Fatalf("valid staged header escaped invalid propagation set: %q", got)
 	}
-	if _, ok := header["invalid:header"]; ok {
+	if _, ok := header["invalid/header"]; ok {
 		t.Fatal("invalid propagation header escaped staged set")
 	}
 }

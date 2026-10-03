@@ -152,8 +152,8 @@ their panic values are discarded, and the broker/handler/settlement path
 continues. Tracer-returned and extracted propagation values are visible to
 propagation and spans, but caller deadlines, cancellation, and cancellation cause
 remain business-owned. Propagation injection is staged so a failed hook cannot
-partially mutate outbound NATS headers. A staged set containing a NATS-invalid
-header key, a value that nats.go would trim/rewrite or that is not valid UTF-8,
+partially mutate outbound NATS headers. A staged set containing a header key
+rejected by pinned nats.go, a value that nats.go would trim/rewrite or that is not valid UTF-8,
 the adapter-reserved `Nats-*` transport-control namespace, or a collision with
 an existing business/transport header is discarded rather than allowed to fail,
 mutate, or alter the business publish. If propagation metadata

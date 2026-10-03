@@ -57,14 +57,19 @@ func (c natsHeaderCarrier) Keys() []string {
 	return keys
 }
 
-// validNATSHeaderKey mirrors the pinned nats.go ADR-4 header-key contract:
-// non-empty printable ASCII, excluding colon.
+const natsHeaderKeyForbidden = "\"()/,:;<=>?@[\\]{}"
+
+// validNATSHeaderKey mirrors the pinned nats.go v1.54.0 header-key grammar.
+// The client is intentionally stricter than ADR-4: keys must use printable
+// ASCII and must not contain any character from natsHeaderKeyForbidden.
 func validNATSHeaderKey(key string) bool {
 	if key == "" {
 		return false
 	}
 	for i := 0; i < len(key); i++ {
-		if key[i] < 0x21 || key[i] > 0x7e || key[i] == ':' {
+		if key[i] < 0x21 ||
+			key[i] > 0x7e ||
+			strings.IndexByte(natsHeaderKeyForbidden, key[i]) >= 0 {
 			return false
 		}
 	}
