@@ -2,38 +2,34 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
 func TestOutboxSubjectConstraintRejectsWhitespaceOnlyText(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
-	for i, subject := range []string{
-		" ",
-		"\t\n\r\v\f",
-		"\u0085",
-		"\u00a0",
-		"\u1680",
-		"\u2003",
-		"\u2028",
-		"\u2029",
-		"\u202f",
-		"\u205f",
-		"\u3000",
-	} {
+	whitespace := []rune{
+		'\t', '\n', '\v', '\f', '\r', ' ',
+		'\u0085', '\u00a0', '\u1680',
+		'\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005',
+		'\u2006', '\u2007', '\u2008', '\u2009', '\u200a',
+		'\u2028', '\u2029', '\u202f', '\u205f', '\u3000',
+	}
+	for i, subject := range whitespace {
 		if _, err := pool.Exec(
 			ctx,
 			`INSERT INTO outbox_events (event_id, subject, payload)
 			 VALUES ($1, $2, ''::bytea)`,
-			"blank-subject-"+string(rune('a'+i)),
-			subject,
+			fmt.Sprintf("blank-subject-%02d", i),
+			string(subject),
 		); err == nil {
-			t.Fatalf("insert with whitespace-only subject %q succeeded", subject)
+			t.Fatalf("insert with whitespace-only subject %U succeeded", subject)
 		}
 	}
 
 	const eventID = "subject-with-non-space"
-	const transportNeutralSubject = "events test"
+	const transportNeutralSubject = " events test "
 	if _, err := pool.Exec(
 		ctx,
 		`INSERT INTO outbox_events (event_id, subject, payload)
