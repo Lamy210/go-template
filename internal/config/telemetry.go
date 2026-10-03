@@ -213,6 +213,9 @@ func (c TelemetryConfig) Validate() error {
 	if endpoint.Hostname() == "" {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must include a host")
 	}
+	if !validTelemetryEndpointPort(endpoint) {
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT contains an invalid TCP port")
+	}
 	if endpoint.User != nil {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must not contain userinfo")
 	}
@@ -257,6 +260,15 @@ func (c TelemetryConfig) Validate() error {
 		return fmt.Errorf("TELEMETRY_SHUTDOWN_TIMEOUT must be positive")
 	}
 	return nil
+}
+
+func validTelemetryEndpointPort(endpoint *url.URL) bool {
+	port := endpoint.Port()
+	if port == "" {
+		return true
+	}
+	parsed, err := strconv.ParseUint(port, 10, 16)
+	return err == nil && parsed != 0
 }
 
 func float64Value(lookup lookupEnv, key string, fallback float64) (float64, error) {
