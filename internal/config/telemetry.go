@@ -210,7 +210,7 @@ func (c TelemetryConfig) Validate() error {
 	if endpoint.Scheme != "http" && endpoint.Scheme != "https" {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must use http or https")
 	}
-	if endpoint.Host == "" {
+	if endpoint.Hostname() == "" {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT must include a host")
 	}
 	if endpoint.User != nil {
