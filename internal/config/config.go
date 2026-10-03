@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Lamy210/go-template/internal/listenaddr"
 )
 
 const (
@@ -145,8 +147,8 @@ func (c Config) Validate() error {
 	if !utf8.ValidString(c.Environment) {
 		return fmt.Errorf("APP_ENV must be valid UTF-8")
 	}
-	if strings.TrimSpace(c.HTTP.Addr) == "" {
-		return fmt.Errorf("HTTP_ADDR must not be empty")
+	if err := listenaddr.ValidateTCP(c.HTTP.Addr); err != nil {
+		return fmt.Errorf("HTTP_ADDR is invalid: %w", err)
 	}
 	var logLevel slog.Level
 	if err := logLevel.UnmarshalText([]byte(c.LogLevel)); err != nil {
