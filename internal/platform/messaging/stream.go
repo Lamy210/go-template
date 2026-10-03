@@ -50,6 +50,9 @@ func (c StreamConfig) Validate() error {
 	if c.MaxAge <= 0 || c.DuplicateWindow <= 0 {
 		return fmt.Errorf("stream time limits must be positive")
 	}
+	if c.DuplicateWindow > c.MaxAge {
+		return fmt.Errorf("stream duplicate window must not exceed max age")
+	}
 	return nil
 }
 
