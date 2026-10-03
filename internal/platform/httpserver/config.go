@@ -2,8 +2,10 @@ package httpserver
 
 import (
 	"errors"
-	"strings"
+	"fmt"
 	"time"
+
+	"github.com/Lamy210/go-template/internal/listenaddr"
 )
 
 // Config contains the HTTP transport limits and timeout policy owned by the
@@ -23,8 +25,8 @@ type Config struct {
 // Validate rejects server settings that would remove transport bounds or create
 // an unusable listener.
 func (c Config) Validate() error {
-	if strings.TrimSpace(c.Addr) == "" {
-		return errors.New("http address must not be empty")
+	if err := listenaddr.ValidateTCP(c.Addr); err != nil {
+		return fmt.Errorf("http address is invalid: %w", err)
 	}
 	if c.ReadHeaderTimeout <= 0 {
 		return errors.New("http read header timeout must be positive")
