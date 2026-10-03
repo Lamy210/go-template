@@ -262,6 +262,9 @@ func (c NATSConfig) Validate() error {
 	if c.MaxAge <= 0 || c.DuplicateWindow <= 0 {
 		return fmt.Errorf("NATS stream time limits must be positive")
 	}
+	if c.DuplicateWindow > c.MaxAge {
+		return fmt.Errorf("NATS_DUPLICATE_WINDOW must not exceed NATS_STREAM_MAX_AGE")
+	}
 	if strings.TrimSpace(c.Durable) == "" || strings.TrimSpace(c.FilterSubject) == "" || strings.TrimSpace(c.QuarantineSubject) == "" {
 		return fmt.Errorf("NATS consumer names and subjects must not be empty")
 	}
