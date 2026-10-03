@@ -18,8 +18,12 @@ func ValidateTCP(address string) error {
 	if strings.TrimSpace(address) != address {
 		return errors.New("listen address must not contain surrounding whitespace")
 	}
-	if _, _, err := net.SplitHostPort(address); err != nil {
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
 		return errors.New("listen address must use host:port form")
+	}
+	if _, err := net.LookupPort("tcp", port); err != nil {
+		return errors.New("listen address contains an invalid TCP port")
 	}
 	return nil
 }
