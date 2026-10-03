@@ -24,15 +24,9 @@ func TestConfigValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "address without port",
+			name: "address without port separator",
 			mutate: func(cfg *Config) {
 				cfg.Addr = "localhost"
-			},
-		},
-		{
-			name: "address with empty port",
-			mutate: func(cfg *Config) {
-				cfg.Addr = ":"
 			},
 		},
 		{
@@ -89,6 +83,16 @@ func TestConfigValidate(t *testing.T) {
 				t.Fatal("Validate() error = nil, want error")
 			}
 		})
+	}
+}
+
+func TestConfigAllowsEphemeralListenPort(t *testing.T) {
+	t.Parallel()
+
+	cfg := testConfig()
+	cfg.Addr = ":"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() ephemeral listen address error = %v", err)
 	}
 }
 
