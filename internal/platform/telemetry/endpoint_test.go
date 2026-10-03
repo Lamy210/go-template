@@ -23,6 +23,18 @@ func TestSignalEndpointPreservesEscapedBasePath(t *testing.T) {
 			signal: "metrics",
 			want:   "https://collector.example.com/otel%2Fproxy/v1/metrics",
 		},
+		{
+			name:   "escaped trailing slash stays escaped",
+			base:   "https://collector.example.com/proxy%2F",
+			signal: "traces",
+			want:   "https://collector.example.com/proxy%2F/v1/traces",
+		},
+		{
+			name:   "literal trailing slash after escaped slash is trimmed",
+			base:   "https://collector.example.com/proxy%2F/",
+			signal: "metrics",
+			want:   "https://collector.example.com/proxy%2F/v1/metrics",
+		},
 	}
 
 	for _, tt := range tests {
