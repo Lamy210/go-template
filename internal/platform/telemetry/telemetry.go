@@ -440,6 +440,8 @@ func signalEndpoint(base, signal string) (string, error) {
 	}
 
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/v1/" + signal
-	endpoint.RawPath = ""
+	if endpoint.RawPath != "" {
+		endpoint.RawPath = strings.TrimRight(endpoint.RawPath, "/") + "/v1/" + signal
+	}
 	return endpoint.String(), nil
 }
