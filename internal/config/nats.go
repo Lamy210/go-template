@@ -27,6 +27,7 @@ const (
 	defaultNATSMaxAge             = 7 * 24 * time.Hour
 	defaultNATSMaxMessageSize     = int32(1 << 20)
 	defaultNATSDuplicateWindow    = 2 * time.Minute
+	minNATSDuplicateWindow        = 100 * time.Millisecond
 	defaultNATSDurable            = "app-worker"
 	defaultNATSFilterSubject      = "app.events.work"
 	defaultNATSQuarantineSubject  = "app.events.quarantine"
@@ -261,6 +262,9 @@ func (c NATSConfig) Validate() error {
 	}
 	if c.MaxAge <= 0 || c.DuplicateWindow <= 0 {
 		return fmt.Errorf("NATS stream time limits must be positive")
+	}
+	if c.DuplicateWindow < minNATSDuplicateWindow {
+		return fmt.Errorf("NATS_DUPLICATE_WINDOW must be at least %s", minNATSDuplicateWindow)
 	}
 	if c.DuplicateWindow > c.MaxAge {
 		return fmt.Errorf("NATS_DUPLICATE_WINDOW must not exceed NATS_STREAM_MAX_AGE")

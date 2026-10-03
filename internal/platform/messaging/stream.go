@@ -13,6 +13,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+const minDuplicateWindow = 100 * time.Millisecond
+
 // StreamConfig defines an explicitly bounded JetStream stream.
 type StreamConfig struct {
 	Name            string
@@ -49,6 +51,9 @@ func (c StreamConfig) Validate() error {
 	}
 	if c.MaxAge <= 0 || c.DuplicateWindow <= 0 {
 		return fmt.Errorf("stream time limits must be positive")
+	}
+	if c.DuplicateWindow < minDuplicateWindow {
+		return fmt.Errorf("stream duplicate window must be at least %s", minDuplicateWindow)
 	}
 	if c.DuplicateWindow > c.MaxAge {
 		return fmt.Errorf("stream duplicate window must not exceed max age")
