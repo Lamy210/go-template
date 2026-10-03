@@ -51,3 +51,16 @@ func TestSignalEndpointPreservesEscapedBasePath(t *testing.T) {
 		})
 	}
 }
+
+func TestSignalEndpointRejectsMissingHostname(t *testing.T) {
+	t.Parallel()
+
+	for _, endpoint := range []string{
+		"http://:4318",
+		"https://:443/otel",
+	} {
+		if _, err := signalEndpoint(endpoint, "traces"); err == nil {
+			t.Fatalf("signalEndpoint(%q) error = nil, want missing hostname error", endpoint)
+		}
+	}
+}
