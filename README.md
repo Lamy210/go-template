@@ -53,6 +53,8 @@ Configuration is read once at startup from environment variables. See `.env.exam
 
 `SERVICE_NAME` defaults to `go-service` and is attached to every structured log together with `version` and `environment`. Process identity values (`SERVICE_NAME` and `APP_ENV`) must be valid UTF-8 because they also cross telemetry and transport text boundaries.
 
+`HTTP_ADDR` must be a trimmed TCP `host:port` string. An empty host remains valid for wildcard binds, and Go's empty service form such as `:` remains valid for an ephemeral port. DNS resolution and actual bind availability are checked only when the listener is created.
+
 `DATABASE_ENABLED=false`, `NATS_ENABLED=false`, `TELEMETRY_ENABLED=false`, and `OUTBOX_DISPATCH_ENABLED=false` are the defaults. When a profile is disabled, its dependency-specific settings are intentionally ignored so stale configuration cannot break a service that does not use that capability.
 
 Invalid configuration for an enabled capability fails fast before the server begins accepting traffic.
