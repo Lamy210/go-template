@@ -96,3 +96,48 @@ func TestDispatcherRejectsDuplicateClaimedRowBeforePublish(t *testing.T) {
 		t.Fatalf("publish calls = %d, want 0", got)
 	}
 }
+
+func TestDispatcherPreflightsAllClaimIdentityBeforePublishingBatch(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	var publishCalls atomic.Int32
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			publishCalls.Add(1)
+			return nil
+		},
+		nil,
+	)
+
+	err := dispatcher.dispatchBatch(
+		context.Background(),
+		[]ClaimedEvent{
+			{
+				ID:        1,
+				EventID:   "invalid-claim",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "",
+			},
+			{
+				ID:        2,
+				EventID:   "valid-sibling",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token-2",
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("dispatchBatch() error = nil, want invalid claim batch error")
+	}
+	if got := err.Error(); got != "dispatch outbox claimed batch" {
+		t.Fatalf("dispatchBatch() error text = %q, want sanitized operation", got)
+	}
+	if got := publishCalls.Load(); got != 0 {
+		t.Fatalf("publish calls = %d, want 0", got)
+	}
+}
