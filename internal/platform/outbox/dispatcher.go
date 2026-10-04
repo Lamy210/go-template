@@ -122,6 +122,16 @@ func (d *Dispatcher) validateInitialized() error {
 	return nil
 }
 
+func (d *Dispatcher) validateClaimForDispatch(event ClaimedEvent) error {
+	if err := validateClaimIdentity(event); err != nil {
+		return err
+	}
+	if event.Attempts <= 0 || event.Attempts > d.cfg.MaxAttempts {
+		return errors.New("outbox claimed event attempts outside dispatcher bounds")
+	}
+	return nil
+}
+
 // NewDispatcher validates dependencies and dispatcher bounds.
 func NewDispatcher(
 	store EventStore,
@@ -207,7 +217,7 @@ func (d *Dispatcher) dispatchBatch(
 	claimedRows := make(map[int64]struct{}, len(events))
 	claimedEventIDs := make(map[string]struct{}, len(events))
 	for _, event := range events {
-		if err := validateClaimIdentity(event); err != nil {
+		if err := d.validateClaimForDispatch(event); err != nil {
 			return newOperationError("dispatch outbox claimed batch", err)
 		}
 		if _, exists := claimedRows[event.ID]; exists {
@@ -255,7 +265,7 @@ func (d *Dispatcher) dispatchBatch(
 }
 
 func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error {
-	if err := validateClaimIdentity(event); err != nil {
+	if err := d.validateClaimForDispatch(event); err != nil {
 		return newOperationError("dispatch outbox claimed event", err)
 	}
 
