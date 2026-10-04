@@ -6,6 +6,12 @@ import "time"
 
 const postgresIntervalPrecision = time.Microsecond
 
+// FitsPostgresIntervalPrecision reports whether value can be serialized as the
+// integer-microsecond interval used by the outbox store without truncation.
+func FitsPostgresIntervalPrecision(value time.Duration) bool {
+	return value%postgresIntervalPrecision == 0
+}
+
 // LeaseCoversClaimPublishSettlement reports whether one outbox lease is strictly
 // longer than the worst-case bounded claim, publish, and settlement sequence.
 //
