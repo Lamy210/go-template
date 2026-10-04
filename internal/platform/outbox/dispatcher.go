@@ -85,6 +85,10 @@ func (c DispatcherConfig) Validate() error {
 	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
 		return errors.New("outbox dispatcher retry delays must be at least one microsecond")
 	}
+	if !outboxbudget.FitsPostgresIntervalPrecision(c.RetryBaseDelay) ||
+		!outboxbudget.FitsPostgresIntervalPrecision(c.RetryMaxDelay) {
+		return errors.New("outbox dispatcher retry delays must use whole microseconds")
+	}
 	if c.RetryMaxDelay < c.RetryBaseDelay || c.RetryMaxDelay > maxClaimLease {
 		return errors.New("outbox dispatcher retry max delay is outside allowed bounds")
 	}

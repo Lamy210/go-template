@@ -177,6 +177,10 @@ func (c OutboxConfig) Validate() error {
 	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
 		return fmt.Errorf("outbox dispatcher retry delays must be at least one microsecond")
 	}
+	if !outboxbudget.FitsPostgresIntervalPrecision(c.RetryBaseDelay) ||
+		!outboxbudget.FitsPostgresIntervalPrecision(c.RetryMaxDelay) {
+		return fmt.Errorf("outbox dispatcher retry delays must use whole microseconds")
+	}
 	if c.RetryMaxDelay < c.RetryBaseDelay {
 		return fmt.Errorf(
 			"OUTBOX_DISPATCH_RETRY_MAX_DELAY must not be less than OUTBOX_DISPATCH_RETRY_BASE_DELAY",
