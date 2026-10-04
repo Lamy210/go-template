@@ -144,6 +144,52 @@ func TestDispatcherRejectsDuplicateEventIDBeforePublish(t *testing.T) {
 	}
 }
 
+func TestDispatcherRejectsInvalidClaimAttemptsBeforePublish(t *testing.T) {
+	t.Parallel()
+
+	for _, attempts := range []int{0, 6} {
+		attempts := attempts
+		t.Run("attempts", func(t *testing.T) {
+			t.Parallel()
+
+			store := &fakeEventStore{}
+			var publishCalls atomic.Int32
+			dispatcher := mustDispatcher(
+				t,
+				store,
+				func(context.Context, string, string, []byte) error {
+					publishCalls.Add(1)
+					return nil
+				},
+				nil,
+			)
+			if dispatcher.cfg.MaxAttempts != 5 {
+				t.Fatalf("test requires MaxAttempts=5, got %d", dispatcher.cfg.MaxAttempts)
+			}
+
+			err := dispatcher.dispatchBatch(
+				context.Background(),
+				[]ClaimedEvent{{
+					ID:        1,
+					EventID:   "event-1",
+					Subject:   "example.created",
+					Attempts:  attempts,
+					LockToken: "token",
+				}},
+			)
+			if err == nil {
+				t.Fatal("dispatchBatch() error = nil, want invalid attempt count error")
+			}
+			if got := err.Error(); got != "dispatch outbox claimed batch" {
+				t.Fatalf("dispatchBatch() error text = %q, want sanitized operation", got)
+			}
+			if got := publishCalls.Load(); got != 0 {
+				t.Fatalf("publish calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
 func TestDispatcherPreflightsAllClaimIdentityBeforePublishingBatch(t *testing.T) {
 	t.Parallel()
 

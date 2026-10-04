@@ -197,8 +197,8 @@ func TestDispatcherStartsClaimedBatchConcurrently(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{
-			{ID: 1, EventID: "event-1", Subject: "example.1", LockToken: "token-1"},
-			{ID: 2, EventID: "event-2", Subject: "example.2", LockToken: "token-2"},
+			{ID: 1, EventID: "event-1", Subject: "example.1", Attempts: 1, LockToken: "token-1"},
+			{ID: 2, EventID: "event-2", Subject: "example.2", Attempts: 1, LockToken: "token-2"},
 		})
 	}()
 
@@ -750,7 +750,7 @@ func TestDispatcherReturnsStorageFailure(t *testing.T) {
 
 	err := dispatcher.dispatchOne(
 		context.Background(),
-		ClaimedEvent{ID: 1, LockToken: "token"},
+		ClaimedEvent{ID: 1, Attempts: 1, LockToken: "token"},
 	)
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("dispatchOne() error = %v, want sentinel", err)
