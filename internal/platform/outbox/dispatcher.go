@@ -232,6 +232,10 @@ func (d *Dispatcher) dispatchBatch(
 }
 
 func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error {
+	if err := validateClaimIdentity(event); err != nil {
+		return newOperationError("dispatch outbox claimed event", err)
+	}
+
 	publishCtx := d.restoreContext(ctx, event)
 	publishCtx, cancelPublish := context.WithTimeout(publishCtx, d.cfg.PublishTimeout)
 	err := invokePublisher(
