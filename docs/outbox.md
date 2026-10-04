@@ -204,6 +204,12 @@ events that failed together instead of scheduling the entire batch for the same
 precision, never falls below the configured retry base delay, and never exceeds
 the configured retry maximum.
 
+Retry base and maximum delays must themselves be representable as whole
+microseconds. `Store.Retry` enforces the same boundary for direct callers. This
+prevents PostgreSQL interval serialization from silently truncating a requested
+retry delay and scheduling a durable retry earlier than the configured base or
+outside the runtime/configuration contract.
+
 Shutdown cancellation is intentionally different: an ambiguous canceled publish
 is released with the exact base delay so shutdown recovery stays prompt and
 predictable.
