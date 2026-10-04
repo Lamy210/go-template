@@ -1,0 +1,50 @@
+package outbox
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+)
+
+func TestDispatcherRejectsClaimBatchAboveConfiguredLimit(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	var publishCalls atomic.Int32
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			publishCalls.Add(1)
+			return nil
+		},
+		nil,
+	)
+	dispatcher.cfg.BatchSize = 1
+
+	err := dispatcher.dispatchBatch(
+		context.Background(),
+		[]ClaimedEvent{
+			{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token-1",
+			},
+			{
+				ID:        2,
+				EventID:   "event-2",
+				Subject:   "example.created",
+				Attempts:  1,
+				LockToken: "token-2",
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("dispatchBatch() error = nil, want oversized batch error")
+	}
+	if got := publishCalls.Load(); got != 0 {
+		t.Fatalf("publish calls = %d, want 0", got)
+	}
+}
