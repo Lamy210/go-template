@@ -172,6 +172,16 @@ func (s *Store) MarkFailed(ctx context.Context, event ClaimedEvent) error {
 	return s.transition(ctx, failSQL, event)
 }
 
+func validateClaimIdentity(event ClaimedEvent) error {
+	if event.ID <= 0 {
+		return errors.New("outbox claimed event ID must be positive")
+	}
+	if event.LockToken == "" {
+		return errors.New("outbox claimed event lock token must not be empty")
+	}
+	return nil
+}
+
 func (s *Store) transition(
 	ctx context.Context,
 	query string,
@@ -181,11 +191,8 @@ func (s *Store) transition(
 	if s == nil || s.pool == nil {
 		return errors.New("outbox store must not be nil")
 	}
-	if event.ID <= 0 {
-		return errors.New("outbox claimed event ID must be positive")
-	}
-	if event.LockToken == "" {
-		return errors.New("outbox claimed event lock token must not be empty")
+	if err := validateClaimIdentity(event); err != nil {
+		return err
 	}
 
 	args := make([]any, 0, 2+len(extraArgs))
