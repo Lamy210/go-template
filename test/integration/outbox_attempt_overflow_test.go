@@ -8,7 +8,7 @@ import (
 	"github.com/Lamy210/go-template/internal/platform/outbox"
 )
 
-func TestOutboxClaimRecoversPostgresIntegerMaxWithoutOverflow(t *testing.T) {
+func TestOutboxClaimTerminalizesPostgresIntegerMaxWithoutOverflow(t *testing.T) {
 	pool, ctx := openTestPool(t)
 
 	const eventID = "integer-max-recovery"
@@ -53,38 +53,33 @@ func TestOutboxClaimRecoversPostgresIntegerMaxWithoutOverflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim integer-max recovery row: %v", err)
 	}
-	if len(claimed) != 1 {
-		t.Fatalf("claimed events = %d, want 1", len(claimed))
-	}
-	wantLogicalAttempt := int64(math.MaxInt32) + 1
-	if got := int64(claimed[0].Attempts); got != wantLogicalAttempt {
-		t.Fatalf("logical recovery attempt = %d, want %d", got, wantLogicalAttempt)
+	if len(claimed) != 0 {
+		t.Fatalf("claimed events = %d, want physical-max row terminalized without publish", len(claimed))
 	}
 
-	var durableAttempts int64
+	var (
+		durableAttempts int64
+		failed          bool
+		locked          bool
+	)
 	if err := pool.QueryRow(
 		ctx,
-		"SELECT attempts FROM outbox_events WHERE event_id = $1",
+		`SELECT attempts,
+		        failed_at IS NOT NULL,
+		        locked_until IS NOT NULL OR lock_token IS NOT NULL
+		 FROM outbox_events
+		 WHERE event_id = $1`,
 		eventID,
-	).Scan(&durableAttempts); err != nil {
-		t.Fatalf("read durable attempts: %v", err)
+	).Scan(&durableAttempts, &failed, &locked); err != nil {
+		t.Fatalf("read physical-max recovery state: %v", err)
 	}
 	if durableAttempts != math.MaxInt32 {
 		t.Fatalf("durable attempts = %d, want saturated %d", durableAttempts, math.MaxInt32)
 	}
-
-	if err := store.MarkFailed(ctx, claimed[0]); err != nil {
-		t.Fatalf("mark saturated recovery claim failed: %v", err)
-	}
-	var failed bool
-	if err := pool.QueryRow(
-		ctx,
-		"SELECT failed_at IS NOT NULL FROM outbox_events WHERE event_id = $1",
-		eventID,
-	).Scan(&failed); err != nil {
-		t.Fatalf("read terminal recovery state: %v", err)
-	}
 	if !failed {
-		t.Fatal("saturated recovery claim was not terminally failed")
+		t.Fatal("physical-max recovery row was not terminally failed")
+	}
+	if locked {
+		t.Fatal("physical-max recovery row retained a lease")
 	}
 }
