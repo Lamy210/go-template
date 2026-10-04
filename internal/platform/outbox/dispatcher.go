@@ -181,9 +181,10 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		}
 
 		if err := d.dispatchBatch(ctx, events); err != nil {
-			// dispatchBatch only returns storage/settlement failures. Those
-			// errors represent uncertain durable state and must remain visible
-			// even when shutdown cancellation happened concurrently.
+			// dispatchBatch only returns fatal extension/storage/settlement failures.
+			// Those errors represent violated runtime bounds or uncertain durable
+			// state and must remain visible even when shutdown cancellation happened
+			// concurrently.
 			return err
 		}
 		if ctx.Err() != nil {
@@ -196,6 +197,13 @@ func (d *Dispatcher) dispatchBatch(
 	ctx context.Context,
 	events []ClaimedEvent,
 ) error {
+	if len(events) > d.cfg.BatchSize {
+		return newOperationError(
+			"dispatch outbox claimed batch",
+			errors.New("outbox event store returned more events than requested"),
+		)
+	}
+
 	batchCtx, cancelBatch := context.WithCancel(ctx)
 	defer cancelBatch()
 
