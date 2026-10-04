@@ -6,51 +6,12 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"strconv"
 	"time"
 
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/outboxbudget"
 )
-
-// ErrPermanentPublishFailure classifies a publish rejection that cannot succeed
-// when the same durable event is retried unchanged. It is intentionally owned by
-// the transport-neutral outbox boundary so composition adapters can map concrete
-// broker/input errors without teaching the outbox package about a broker.
-var ErrPermanentPublishFailure = errors.New("outbox publish permanently rejected")
-
-var (
-	errPublisherPanic  = errors.New("outbox publisher panicked")
-	errEventStorePanic = errors.New("outbox event store panicked")
-)
-
-type permanentPublishError struct {
-	cause error
-}
-
-func (e *permanentPublishError) Error() string {
-	return ErrPermanentPublishFailure.Error()
-}
-
-func (e *permanentPublishError) Unwrap() []error {
-	return []error{ErrPermanentPublishFailure, e.cause}
-}
-
-// MarkPermanentPublishFailure classifies err as a deterministic rejection of
-// the unchanged durable event while retaining the original cause for
-// errors.Is/errors.As traversal. The returned Error string remains sanitized.
-func MarkPermanentPublishFailure(err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, ErrPermanentPublishFailure) {
-		return err
-	}
-	return &permanentPublishError{cause: err}
-}
-
-// Publisher sends one durable event to an external transport. The event ID must
-// be used as the transport deduplication key when the transport supports one.
-type Publisher func(context.Context, string, string, []byte) error
 
 // EventStore is the storage boundary required by the dispatcher.
 type EventStore interface {
@@ -60,7 +21,43 @@ type EventStore interface {
 	MarkFailed(context.Context, ClaimedEvent) error
 }
 
-// DispatcherConfig bounds polling, leases, retries, and external calls.
+// Publisher sends one durable event to the external broker.
+type Publisher func(context.Context, string, string, []byte) error
+
+var (
+	errPublisherPanic  = errors.New("outbox publisher panicked")
+	errEventStorePanic = errors.New("outbox event store panicked")
+	// ErrPermanentPublishFailure marks a publisher rejection that cannot become
+	// successful by retrying the same durable event unchanged.
+	ErrPermanentPublishFailure = errors.New("outbox publish permanently rejected")
+)
+
+type permanentPublishFailure struct {
+	cause error
+}
+
+func (e *permanentPublishFailure) Error() string {
+	return ErrPermanentPublishFailure.Error()
+}
+
+func (e *permanentPublishFailure) Unwrap() error {
+	return e.cause
+}
+
+func (e *permanentPublishFailure) Is(target error) bool {
+	return target == ErrPermanentPublishFailure
+}
+
+// MarkPermanentPublishFailure lets a composition adapter classify a
+// transport-specific rejection without making the outbox import that transport.
+func MarkPermanentPublishFailure(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return &permanentPublishFailure{cause: cause}
+}
+
+// DispatcherConfig bounds polling, publishing, retry, and settlement behavior.
 type DispatcherConfig struct {
 	BatchSize      int
 	PollInterval   time.Duration
@@ -72,10 +69,10 @@ type DispatcherConfig struct {
 	StoreTimeout   time.Duration
 }
 
-// Validate rejects unbounded or internally inconsistent dispatcher behavior.
+// Validate rejects unbounded dispatcher behavior.
 func (c DispatcherConfig) Validate() error {
-	if c.BatchSize <= 0 || c.BatchSize > 1000 {
-		return errors.New("outbox dispatcher batch size must be between 1 and 1000")
+	if c.BatchSize <= 0 || c.BatchSize > 256 {
+		return errors.New("outbox dispatcher batch size must be between 1 and 256")
 	}
 	if c.PollInterval <= 0 {
 		return errors.New("outbox dispatcher poll interval must be positive")
@@ -83,7 +80,7 @@ func (c DispatcherConfig) Validate() error {
 	if c.Lease < time.Microsecond || c.Lease > maxClaimLease {
 		return errors.New("outbox dispatcher lease must be between one microsecond and 24 hours")
 	}
-	if c.MaxAttempts <= 0 || int64(c.MaxAttempts) > int64(math.MaxInt32) {
+	if c.MaxAttempts <= 0 || c.MaxAttempts > math.MaxInt32 {
 		return errors.New("outbox dispatcher max attempts must be between 1 and PostgreSQL INTEGER max")
 	}
 	if c.RetryBaseDelay < time.Microsecond || c.RetryMaxDelay < time.Microsecond {
@@ -93,11 +90,11 @@ func (c DispatcherConfig) Validate() error {
 		!outboxbudget.FitsPostgresIntervalPrecision(c.RetryMaxDelay) {
 		return errors.New("outbox dispatcher retry delays must use whole microseconds")
 	}
-	if c.RetryBaseDelay > c.RetryMaxDelay || c.RetryMaxDelay > maxClaimLease {
-		return errors.New("outbox dispatcher retry delays are inconsistent")
+	if c.RetryMaxDelay < c.RetryBaseDelay || c.RetryMaxDelay > maxClaimLease {
+		return errors.New("outbox dispatcher retry max delay is outside allowed bounds")
 	}
 	if c.PublishTimeout <= 0 || c.StoreTimeout <= 0 {
-		return errors.New("outbox dispatcher operation timeouts must be positive")
+		return errors.New("outbox dispatcher publish and store timeouts must be positive")
 	}
 	if !outboxbudget.LeaseCoversClaimPublishSettlement(
 		c.Lease,
@@ -330,10 +327,9 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return nil
 	}
 
-	if ctx.Err() != nil || publishCtx.Err() != nil {
-		// Cancellation can race with broker acknowledgement. The outcome is
-		// ambiguous, so release the claim for retry even at MaxAttempts rather
-		// than marking it permanently failed.
+	// Cancellation makes ordinary publish success ambiguous. Release the lease
+	// for a later at-least-once retry rather than permanently failing the event.
+	if ctx.Err() != nil {
 		if retryErr := invokeStoreOperation(func() error {
 			return d.store.Retry(settleCtx, event, d.cfg.RetryBaseDelay)
 		}); retryErr != nil {
@@ -346,7 +342,7 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		if failErr := invokeStoreOperation(func() error {
 			return d.store.MarkFailed(settleCtx, event)
 		}); failErr != nil {
-			return newOperationError("mark failed outbox event", failErr)
+			return newOperationError("mark outbox event failed", failErr)
 		}
 		return nil
 	}
@@ -363,16 +359,6 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return newOperationError("schedule outbox retry", retryErr)
 	}
 	return nil
-}
-
-func (d *Dispatcher) restoreContext(ctx context.Context, event ClaimedEvent) context.Context {
-	if d.propagator == nil || (event.Traceparent == "" && event.Tracestate == "") {
-		return ctx
-	}
-	carrier := newPropagationCarrier()
-	carrier.Set("traceparent", event.Traceparent)
-	carrier.Set("tracestate", event.Tracestate)
-	return extractPropagationSafely(ctx, d.propagator, carrier)
 }
 
 func invokePublisher(
@@ -413,67 +399,101 @@ func invokeStoreOperation(operation func() error) (err error) {
 	return operation()
 }
 
+func (d *Dispatcher) restoreContext(
+	ctx context.Context,
+	event ClaimedEvent,
+) context.Context {
+	if d.propagator == nil {
+		return ctx
+	}
+	carrier := newPropagationCarrier()
+	if event.Traceparent != "" {
+		carrier.Set("traceparent", event.Traceparent)
+	}
+	if event.Tracestate != "" {
+		carrier.Set("tracestate", event.Tracestate)
+	}
+	return extractPropagationSafely(ctx, d.propagator, carrier)
+}
+
+func retryDelay(attempt int, base, maximum time.Duration) time.Duration {
+	if attempt <= 1 {
+		return base
+	}
+
+	delay := base
+	for current := 1; current < attempt; current++ {
+		if delay >= maximum {
+			return maximum
+		}
+		if delay > maximum/2 {
+			return maximum
+		}
+		delay *= 2
+	}
+	if delay > maximum {
+		return maximum
+	}
+	return delay
+}
+
+func retryDelayForEvent(
+	eventID string,
+	attempt int,
+	base time.Duration,
+	maximum time.Duration,
+) time.Duration {
+	envelope := retryDelay(attempt, base, maximum)
+	if attempt <= 1 || eventID == "" {
+		return envelope
+	}
+
+	envelopeMicros := envelope / time.Microsecond
+	if envelopeMicros <= 1 {
+		return envelope
+	}
+
+	// Equal-ish deterministic jitter near the top of the exponential envelope.
+	// Normally this is the final 25%. When a capped envelope is close to the
+	// configured base, clamp the lower bound so a later retry can never occur
+	// sooner than the first retry.
+	windowMicros := envelopeMicros / 4
+	if windowMicros == 0 {
+		return envelope
+	}
+	lowerMicros := envelopeMicros - windowMicros
+	baseMicros := base / time.Microsecond
+	if lowerMicros < baseMicros {
+		lowerMicros = baseMicros
+	}
+	windowMicros = envelopeMicros - lowerMicros
+	if windowMicros == 0 {
+		return envelope
+	}
+
+	const maxHash = float64(1<<32 - 1)
+	fraction := float64(retryJitterHash(eventID, attempt)) / maxHash
+	offsetMicros := time.Duration(float64(windowMicros) * fraction)
+
+	return (lowerMicros + offsetMicros) * time.Microsecond
+}
+
+func retryJitterHash(eventID string, attempt int) uint32 {
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(eventID))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(strconv.Itoa(attempt)))
+	return hasher.Sum32()
+}
+
 func waitForPoll(ctx context.Context, interval time.Duration) error {
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
 		return nil
 	}
-}
-
-func retryDelay(attempt int, base, maxDelay time.Duration) time.Duration {
-	if attempt <= 1 {
-		return base
-	}
-	if base >= maxDelay {
-		return maxDelay
-	}
-
-	delay := base
-	for step := 1; step < attempt; step++ {
-		if delay >= maxDelay/2 {
-			return maxDelay
-		}
-		delay *= 2
-	}
-	if delay > maxDelay {
-		return maxDelay
-	}
-	return delay
-}
-
-func retryDelayForEvent(eventID string, attempt int, base, maxDelay time.Duration) time.Duration {
-	envelope := retryDelay(attempt, base, maxDelay)
-	if attempt <= 1 {
-		return envelope
-	}
-	if envelope <= base {
-		return base
-	}
-
-	lowerBound := envelope - envelope/4
-	if lowerBound < base {
-		lowerBound = base
-	}
-	window := envelope - lowerBound
-	if window <= 0 {
-		return lowerBound
-	}
-
-	hash := fnv.New64a()
-	_, _ = hash.Write([]byte(eventID))
-	_, _ = fmt.Fprintf(hash, ":%d", attempt)
-
-	const precision = time.Microsecond
-	lowerMicros := lowerBound / precision
-	upperMicros := envelope / precision
-	if upperMicros <= lowerMicros {
-		return lowerMicros * precision
-	}
-	spanMicros := uint64(upperMicros-lowerMicros) + 1
-	jitterMicros := time.Duration(hash.Sum64() % spanMicros)
-	return (lowerMicros + jitterMicros) * precision
 }
