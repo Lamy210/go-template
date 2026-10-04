@@ -25,6 +25,24 @@ func TestDispatcherConfigRejectsRetryBasePrecisionLoss(t *testing.T) {
 	}
 }
 
+func TestDispatcherConfigRejectsRetryMaxPrecisionLoss(t *testing.T) {
+	t.Parallel()
+
+	cfg := DispatcherConfig{
+		BatchSize:      1,
+		PollInterval:   time.Second,
+		Lease:          10 * time.Second,
+		MaxAttempts:    1,
+		RetryBaseDelay: time.Second,
+		RetryMaxDelay:  2*time.Second + time.Nanosecond,
+		PublishTimeout: time.Second,
+		StoreTimeout:   time.Second,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() error = nil, want retry max precision error")
+	}
+}
+
 func TestStoreRetryRejectsRetryDelayPrecisionLoss(t *testing.T) {
 	t.Parallel()
 
