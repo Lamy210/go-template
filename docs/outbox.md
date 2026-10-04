@@ -95,11 +95,18 @@ before any external publish call.
 
 A claim:
 
-- increments the attempt count;
+- increments the attempt count while the PostgreSQL `INTEGER` counter still has
+  representable headroom;
 - assigns a cryptographically random lease token;
 - sets `locked_until`;
 - returns only rows whose availability time has passed and whose prior lease is
   absent or expired.
+
+An expired row already at PostgreSQL `INTEGER` max cannot be incremented again.
+`Store.Claim` terminalizes such physical-ceiling rows before the normal claim
+query, using the same `FOR UPDATE SKIP LOCKED` discipline and consuming from the
+configured batch budget. This prevents integer overflow without creating an
+extra publish attempt.
 
 This permits multiple dispatcher instances without holding a database
 transaction open during broker I/O.
@@ -192,19 +199,26 @@ For a normal publish failure:
 3. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
 
 A process can crash after it claims the final allowed attempt but before it
-publishes or settles the row. After that lease expires, the next claim increments
-the durable attempt count once more. The dispatcher treats this as a recovery
-claim: it validates the claim and durable event, does not call the publisher, and
-settles the row with `failed_at`. This prevents restart loops from generating an
-extra external side effect after the configured publish-attempt budget is
-already exhausted. If that recovery settlement fails, the dispatcher still
-returns a fatal storage error because durable state is uncertain.
+publishes or settles the row. After that lease expires, a normal recovery claim
+increments the durable attempt count once more. The dispatcher treats this as a
+recovery claim: it validates the claim and durable event, does not call the
+publisher, and settles the row with `failed_at`. This prevents restart loops
+from generating an extra external side effect after the configured
+publish-attempt budget is already exhausted. If that recovery settlement fails,
+the dispatcher still returns a fatal storage error because durable state is
+uncertain.
+
+The physical PostgreSQL ceiling is handled specially. If an expired recovery
+row already has `attempts = 2,147,483,647`, `Store.Claim` cannot increment the
+`INTEGER` column. Instead it marks that row failed inside the bounded claim
+transaction before selecting normal work. The physical counter remains
+saturated, no publisher is invoked, and the row cannot enter an integer-overflow
+restart loop.
 
 `OUTBOX_DISPATCH_MAX_ATTEMPTS` may not exceed PostgreSQL `INTEGER` max
-(2,147,483,647), because each claim increments the durable `attempts INTEGER`
-column before dispatch. Rejecting larger Go `int` values prevents a configured
-retry budget from outliving the database representation and failing with an
-integer overflow during claim.
+(2,147,483,647). The store's physical-ceiling recovery path preserves that
+configured maximum while ensuring an expired final claim never requires an
+unrepresentable `attempts + 1` database value.
 
 The jitter key is the stable `event_id` plus attempt number. It requires no
 process-global RNG, is reproducible across restarts, and spreads different
@@ -290,8 +304,8 @@ guarantee that retrying the unchanged durable event cannot succeed.
 
 Permanent publish failures are settled immediately with `failed_at`, regardless
 of the current attempt count. They do not consume the remaining exponential
-retry budget. The wrapper preserves the underlying cause for
-`errors.Is/errors.As`, but its normal `Error()` text is the sanitized
+retry budget. The wrapper preserves the underlying cause for `errors.Is/errors.As`,
+but its normal `Error()` text is the sanitized
 `outbox publish permanently rejected` sentinel.
 
 The NATS composition classifies only immutable durable-event defects as
@@ -373,6 +387,7 @@ The PostgreSQL/Testcontainers suite verifies:
 - final publish settlement;
 - recovery after a process crash following the final allowed claim, without an
   extra publish;
+- terminal recovery at PostgreSQL `INTEGER` max without counter overflow;
 - duplicate event IDs returning sanitized error text.
 
 The combined PostgreSQL + real JetStream integration verifies:

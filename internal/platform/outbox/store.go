@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/Lamy210/go-template/internal/outboxbudget"
@@ -13,6 +14,27 @@ import (
 )
 
 var errNilDBTX = errors.New("outbox DBTX must not be nil")
+
+const terminalizePhysicalMaxClaimsSQL = `
+WITH exhausted AS (
+    SELECT id
+    FROM outbox_events
+    WHERE published_at IS NULL
+      AND failed_at IS NULL
+      AND attempts = $1
+      AND available_at <= CURRENT_TIMESTAMP
+      AND (locked_until IS NULL OR locked_until <= CURRENT_TIMESTAMP)
+    ORDER BY available_at, id
+    FOR UPDATE SKIP LOCKED
+    LIMIT $2
+)
+UPDATE outbox_events AS event
+SET failed_at = CURRENT_TIMESTAMP,
+    locked_until = NULL,
+    lock_token = NULL
+FROM exhausted
+WHERE event.id = exhausted.id
+`
 
 const claimSQL = `
 WITH candidates AS (
@@ -111,13 +133,34 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 		_ = tx.Rollback(ctx)
 	}()
 
-	rows, err := tx.Query(ctx, claimSQL, cfg.BatchSize, durationInterval(cfg.Lease), token)
+	// attempts is a PostgreSQL INTEGER. A process can crash after claiming the
+	// physical maximum but before settlement, leaving an expired row that cannot
+	// be incremented again. Terminalize those rows first, bounded by BatchSize,
+	// instead of overflowing before dispatcher recovery can run.
+	terminalized, err := tx.Exec(
+		ctx,
+		terminalizePhysicalMaxClaimsSQL,
+		math.MaxInt32,
+		cfg.BatchSize,
+	)
+	if err != nil {
+		return nil, newOperationError("terminalize exhausted outbox claims", err)
+	}
+	remaining := cfg.BatchSize - int(terminalized.RowsAffected())
+	if remaining == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, newOperationError("commit outbox claim transaction", err)
+		}
+		return nil, nil
+	}
+
+	rows, err := tx.Query(ctx, claimSQL, remaining, durationInterval(cfg.Lease), token)
 	if err != nil {
 		return nil, newOperationError("claim outbox events", err)
 	}
 	defer rows.Close()
 
-	claimed := make([]ClaimedEvent, 0, cfg.BatchSize)
+	claimed := make([]ClaimedEvent, 0, remaining)
 	for rows.Next() {
 		var event ClaimedEvent
 		if err := rows.Scan(
