@@ -30,6 +30,7 @@ CREATE TABLE outbox_events (
         CHECK (octet_length(tracestate) <= 512),
     attempts INTEGER NOT NULL DEFAULT 0
         CHECK (attempts >= 0),
+    retry_scheduled BOOLEAN NOT NULL DEFAULT FALSE,
     available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     locked_until TIMESTAMPTZ,
     lock_token TEXT
