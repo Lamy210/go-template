@@ -190,6 +190,86 @@ func TestDispatcherRejectsInvalidClaimAttemptsBeforePublish(t *testing.T) {
 	}
 }
 
+func TestDispatcherRejectsInvalidClaimedEventContentBeforePublish(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*ClaimedEvent)
+	}{
+		{
+			name: "empty event ID",
+			mutate: func(event *ClaimedEvent) {
+				event.EventID = ""
+			},
+		},
+		{
+			name: "blank subject",
+			mutate: func(event *ClaimedEvent) {
+				event.Subject = "   "
+			},
+		},
+		{
+			name: "oversized payload",
+			mutate: func(event *ClaimedEvent) {
+				event.Payload = make([]byte, maxPayloadBytes+1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := &fakeEventStore{}
+			var publishCalls atomic.Int32
+			dispatcher := mustDispatcher(
+				t,
+				store,
+				func(context.Context, string, string, []byte) error {
+					publishCalls.Add(1)
+					return nil
+				},
+				nil,
+			)
+
+			invalid := ClaimedEvent{
+				ID:        1,
+				EventID:   "event-1",
+				Subject:   "example.created",
+				Payload:   []byte("payload"),
+				Attempts:  1,
+				LockToken: "token-1",
+			}
+			tt.mutate(&invalid)
+
+			err := dispatcher.dispatchBatch(
+				context.Background(),
+				[]ClaimedEvent{
+					invalid,
+					{
+						ID:        2,
+						EventID:   "valid-sibling",
+						Subject:   "example.created",
+						Payload:   []byte("payload"),
+						Attempts:  1,
+						LockToken: "token-2",
+					},
+				},
+			)
+			if err == nil {
+				t.Fatal("dispatchBatch() error = nil, want invalid claimed event error")
+			}
+			if got := err.Error(); got != "dispatch outbox claimed batch" {
+				t.Fatalf("dispatchBatch() error text = %q, want sanitized operation", got)
+			}
+			if got := publishCalls.Load(); got != 0 {
+				t.Fatalf("publish calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
 func TestDispatcherPreflightsAllClaimIdentityBeforePublishingBatch(t *testing.T) {
 	t.Parallel()
 
