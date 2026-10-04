@@ -144,10 +144,10 @@ func TestDispatcherRejectsDuplicateEventIDBeforePublish(t *testing.T) {
 	}
 }
 
-func TestDispatcherRejectsInvalidClaimAttemptsBeforePublish(t *testing.T) {
+func TestDispatcherRejectsNonPositiveClaimAttemptsBeforePublish(t *testing.T) {
 	t.Parallel()
 
-	for _, attempts := range []int{0, 6} {
+	for _, attempts := range []int{-1, 0} {
 		attempts := attempts
 		t.Run("attempts", func(t *testing.T) {
 			t.Parallel()
@@ -163,9 +163,6 @@ func TestDispatcherRejectsInvalidClaimAttemptsBeforePublish(t *testing.T) {
 				},
 				nil,
 			)
-			if dispatcher.cfg.MaxAttempts != 5 {
-				t.Fatalf("test requires MaxAttempts=5, got %d", dispatcher.cfg.MaxAttempts)
-			}
 
 			err := dispatcher.dispatchBatch(
 				context.Background(),
@@ -187,6 +184,45 @@ func TestDispatcherRejectsInvalidClaimAttemptsBeforePublish(t *testing.T) {
 				t.Fatalf("publish calls = %d, want 0", got)
 			}
 		})
+	}
+}
+
+func TestDispatcherTerminalizesExhaustedClaimWithoutPublish(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeEventStore{}
+	var publishCalls atomic.Int32
+	dispatcher := mustDispatcher(
+		t,
+		store,
+		func(context.Context, string, string, []byte) error {
+			publishCalls.Add(1)
+			return nil
+		},
+		nil,
+	)
+	if dispatcher.cfg.MaxAttempts != 5 {
+		t.Fatalf("test requires MaxAttempts=5, got %d", dispatcher.cfg.MaxAttempts)
+	}
+
+	event := ClaimedEvent{
+		ID:        1,
+		EventID:   "event-1",
+		Subject:   "example.created",
+		Attempts:  dispatcher.cfg.MaxAttempts + 1,
+		LockToken: "token",
+	}
+	if err := dispatcher.dispatchBatch(context.Background(), []ClaimedEvent{event}); err != nil {
+		t.Fatalf("dispatchBatch() error = %v", err)
+	}
+	if got := publishCalls.Load(); got != 0 {
+		t.Fatalf("publish calls = %d, want 0", got)
+	}
+	if len(store.failed) != 1 {
+		t.Fatalf("failed settlements = %d, want 1", len(store.failed))
+	}
+	if store.failed[0].ID != event.ID || store.failed[0].Attempts != event.Attempts {
+		t.Fatalf("failed settlement = %+v, want recovery claim %+v", store.failed[0], event)
 	}
 }
 

@@ -191,6 +191,15 @@ For a normal publish failure:
    sooner than the first retry;
 3. when `OUTBOX_DISPATCH_MAX_ATTEMPTS` is reached, the row is marked failed.
 
+A process can crash after it claims the final allowed attempt but before it
+publishes or settles the row. After that lease expires, the next claim increments
+the durable attempt count once more. The dispatcher treats this as a recovery
+claim: it validates the claim and durable event, does not call the publisher, and
+settles the row with `failed_at`. This prevents restart loops from generating an
+extra external side effect after the configured publish-attempt budget is
+already exhausted. If that recovery settlement fails, the dispatcher still
+returns a fatal storage error because durable state is uncertain.
+
 `OUTBOX_DISPATCH_MAX_ATTEMPTS` may not exceed PostgreSQL `INTEGER` max
 (2,147,483,647), because each claim increments the durable `attempts INTEGER`
 column before dispatch. Rejecting larger Go `int` values prevents a configured
@@ -362,6 +371,8 @@ The PostgreSQL/Testcontainers suite verifies:
 - delayed retry and new claim tokens;
 - monotonic attempt count;
 - final publish settlement;
+- recovery after a process crash following the final allowed claim, without an
+  extra publish;
 - duplicate event IDs returning sanitized error text.
 
 The combined PostgreSQL + real JetStream integration verifies:
