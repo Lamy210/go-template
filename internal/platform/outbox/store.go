@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Lamy210/go-template/internal/outboxbudget"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -151,6 +152,9 @@ func (s *Store) MarkPublished(ctx context.Context, event ClaimedEvent) error {
 func (s *Store) Retry(ctx context.Context, event ClaimedEvent, delay time.Duration) error {
 	if delay < time.Microsecond {
 		return errors.New("outbox retry delay must be at least one microsecond")
+	}
+	if !outboxbudget.FitsPostgresIntervalPrecision(delay) {
+		return errors.New("outbox retry delay must use whole microseconds")
 	}
 	if delay > maxClaimLease {
 		return errors.New("outbox retry delay must not exceed 24 hours")
