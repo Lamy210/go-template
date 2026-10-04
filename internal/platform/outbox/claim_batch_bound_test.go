@@ -44,6 +44,9 @@ func TestDispatcherRejectsClaimBatchAboveConfiguredLimit(t *testing.T) {
 	if err == nil {
 		t.Fatal("dispatchBatch() error = nil, want oversized batch error")
 	}
+	if got := err.Error(); got != "dispatch outbox claimed batch" {
+		t.Fatalf("dispatchBatch() error text = %q, want sanitized operation", got)
+	}
 	if got := publishCalls.Load(); got != 0 {
 		t.Fatalf("publish calls = %d, want 0", got)
 	}
