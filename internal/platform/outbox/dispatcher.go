@@ -205,6 +205,7 @@ func (d *Dispatcher) dispatchBatch(
 	}
 
 	claimedRows := make(map[int64]struct{}, len(events))
+	claimedEventIDs := make(map[string]struct{}, len(events))
 	for _, event := range events {
 		if err := validateClaimIdentity(event); err != nil {
 			return newOperationError("dispatch outbox claimed batch", err)
@@ -216,6 +217,14 @@ func (d *Dispatcher) dispatchBatch(
 			)
 		}
 		claimedRows[event.ID] = struct{}{}
+
+		if _, exists := claimedEventIDs[event.EventID]; exists {
+			return newOperationError(
+				"dispatch outbox claimed batch",
+				errors.New("outbox event store returned duplicate event ID"),
+			)
+		}
+		claimedEventIDs[event.EventID] = struct{}{}
 	}
 
 	batchCtx, cancelBatch := context.WithCancel(ctx)
