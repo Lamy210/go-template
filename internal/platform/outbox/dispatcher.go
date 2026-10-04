@@ -206,6 +206,9 @@ func (d *Dispatcher) dispatchBatch(
 
 	claimedRows := make(map[int64]struct{}, len(events))
 	for _, event := range events {
+		if err := validateClaimIdentity(event); err != nil {
+			return newOperationError("dispatch outbox claimed batch", err)
+		}
 		if _, exists := claimedRows[event.ID]; exists {
 			return newOperationError(
 				"dispatch outbox claimed batch",
