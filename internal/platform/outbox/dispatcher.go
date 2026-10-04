@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"math"
 	"strconv"
@@ -132,6 +133,17 @@ func (d *Dispatcher) validateClaimForDispatch(event ClaimedEvent) error {
 	return nil
 }
 
+func validateClaimedEventContent(event ClaimedEvent) error {
+	if err := (Event{
+		ID:      event.EventID,
+		Subject: event.Subject,
+		Payload: event.Payload,
+	}).Validate(); err != nil {
+		return fmt.Errorf("outbox claimed event content is invalid: %w", err)
+	}
+	return nil
+}
+
 // NewDispatcher validates dependencies and dispatcher bounds.
 func NewDispatcher(
 	store EventStore,
@@ -218,6 +230,9 @@ func (d *Dispatcher) dispatchBatch(
 	claimedEventIDs := make(map[string]struct{}, len(events))
 	for _, event := range events {
 		if err := d.validateClaimForDispatch(event); err != nil {
+			return newOperationError("dispatch outbox claimed batch", err)
+		}
+		if err := validateClaimedEventContent(event); err != nil {
 			return newOperationError("dispatch outbox claimed batch", err)
 		}
 		if _, exists := claimedRows[event.ID]; exists {
