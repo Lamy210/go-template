@@ -127,8 +127,8 @@ func (d *Dispatcher) validateClaimForDispatch(event ClaimedEvent) error {
 	if err := validateClaimIdentity(event); err != nil {
 		return err
 	}
-	if event.Attempts <= 0 || event.Attempts > d.cfg.MaxAttempts {
-		return errors.New("outbox claimed event attempts outside dispatcher bounds")
+	if event.Attempts <= 0 {
+		return errors.New("outbox claimed event attempts must be positive")
 	}
 	return nil
 }
@@ -282,6 +282,23 @@ func (d *Dispatcher) dispatchBatch(
 func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error {
 	if err := d.validateClaimForDispatch(event); err != nil {
 		return newOperationError("dispatch outbox claimed event", err)
+	}
+
+	if event.Attempts > d.cfg.MaxAttempts {
+		settleBase := context.WithoutCancel(ctx)
+		settleCtx, cancelSettle := context.WithTimeout(settleBase, d.cfg.StoreTimeout)
+		defer cancelSettle()
+
+		// A previous process can crash after its final allowed claim but before
+		// publish/settlement. The expired lease is then reclaimed with attempts
+		// one past the configured publish budget. Terminalize that recovery claim
+		// without producing another external side effect.
+		if failErr := invokeStoreOperation(func() error {
+			return d.store.MarkFailed(settleCtx, event)
+		}); failErr != nil {
+			return newOperationError("mark exhausted outbox event failed", failErr)
+		}
+		return nil
 	}
 
 	publishCtx := d.restoreContext(ctx, event)
