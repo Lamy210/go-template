@@ -133,6 +133,10 @@ func (d *Dispatcher) validateClaimForDispatch(event ClaimedEvent) error {
 	if event.Attempts <= 0 || event.Attempts > d.cfg.MaxAttempts {
 		return errors.New("outbox claimed event attempts outside dispatcher bounds")
 	}
+	return nil
+}
+
+func validateClaimedEventContent(event ClaimedEvent) error {
 	if err := (Event{
 		ID:      event.EventID,
 		Subject: event.Subject,
@@ -229,6 +233,9 @@ func (d *Dispatcher) dispatchBatch(
 	claimedEventIDs := make(map[string]struct{}, len(events))
 	for _, event := range events {
 		if err := d.validateClaimForDispatch(event); err != nil {
+			return newOperationError("dispatch outbox claimed batch", err)
+		}
+		if err := validateClaimedEventContent(event); err != nil {
 			return newOperationError("dispatch outbox claimed batch", err)
 		}
 		if _, exists := claimedRows[event.ID]; exists {
