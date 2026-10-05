@@ -45,6 +45,8 @@ CREATE TABLE outbox_events (
             (published_at IS NULL AND failed_at IS NULL)
             OR attempts > 0
         ),
+    CONSTRAINT outbox_events_trace_context_state_check
+        CHECK (tracestate = '' OR traceparent <> ''),
     CONSTRAINT outbox_events_lease_state_check
         CHECK (
             locked_until IS NULL
