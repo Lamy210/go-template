@@ -22,6 +22,7 @@ WITH exhausted AS (
     WHERE published_at IS NULL
       AND failed_at IS NULL
       AND attempts = $1
+      AND retry_scheduled = FALSE
       AND available_at <= CURRENT_TIMESTAMP
       AND (locked_until IS NULL OR locked_until <= CURRENT_TIMESTAMP)
     ORDER BY available_at, id
@@ -38,7 +39,7 @@ WHERE event.id = exhausted.id
 
 const claimSQL = `
 WITH candidates AS (
-    SELECT id
+    SELECT id, retry_scheduled
     FROM outbox_events
     WHERE published_at IS NULL
       AND failed_at IS NULL
@@ -49,9 +50,13 @@ WITH candidates AS (
     LIMIT $1
 )
 UPDATE outbox_events AS event
-SET attempts = event.attempts + 1,
+SET attempts = CASE
+        WHEN event.attempts = $4 AND candidates.retry_scheduled THEN event.attempts
+        ELSE event.attempts + 1
+    END,
     locked_until = CURRENT_TIMESTAMP + $2::interval,
-    lock_token = $3
+    lock_token = $3,
+    retry_scheduled = FALSE
 FROM candidates
 WHERE event.id = candidates.id
 RETURNING
@@ -62,7 +67,8 @@ RETURNING
     event.traceparent,
     event.tracestate,
     event.attempts,
-    event.lock_token
+    event.lock_token,
+    candidates.retry_scheduled
 `
 
 const markPublishedSQL = `
@@ -81,7 +87,8 @@ const retrySQL = `
 UPDATE outbox_events
 SET available_at = CURRENT_TIMESTAMP + $3::interval,
     locked_until = NULL,
-    lock_token = NULL
+    lock_token = NULL,
+    retry_scheduled = TRUE
 WHERE id = $1
   AND lock_token = $2
   AND locked_until > CURRENT_TIMESTAMP
@@ -136,7 +143,9 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 	// attempts is a PostgreSQL INTEGER. A process can crash after claiming the
 	// physical maximum but before settlement, leaving an expired row that cannot
 	// be incremented again. Terminalize those rows first, bounded by BatchSize,
-	// instead of overflowing before dispatcher recovery can run.
+	// instead of overflowing before dispatcher recovery can run. A row released
+	// by Retry is excluded because its one-shot retry marker authorizes the next
+	// claim even when the counter is already saturated.
 	terminalized, err := tx.Exec(
 		ctx,
 		terminalizePhysicalMaxClaimsSQL,
@@ -154,7 +163,14 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 		return nil, nil
 	}
 
-	rows, err := tx.Query(ctx, claimSQL, remaining, durationInterval(cfg.Lease), token)
+	rows, err := tx.Query(
+		ctx,
+		claimSQL,
+		remaining,
+		durationInterval(cfg.Lease),
+		token,
+		math.MaxInt32,
+	)
 	if err != nil {
 		return nil, newOperationError("claim outbox events", err)
 	}
@@ -172,6 +188,7 @@ func (s *Store) Claim(ctx context.Context, cfg ClaimConfig) ([]ClaimedEvent, err
 			&event.Tracestate,
 			&event.Attempts,
 			&event.LockToken,
+			&event.RetryScheduled,
 		); err != nil {
 			return nil, newOperationError("scan claimed outbox event", err)
 		}

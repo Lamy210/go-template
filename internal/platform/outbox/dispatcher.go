@@ -284,15 +284,15 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, event ClaimedEvent) error 
 		return newOperationError("dispatch outbox claimed event", err)
 	}
 
-	if event.Attempts > d.cfg.MaxAttempts {
+	if event.Attempts > d.cfg.MaxAttempts && !event.RetryScheduled {
 		settleBase := context.WithoutCancel(ctx)
 		settleCtx, cancelSettle := context.WithTimeout(settleBase, d.cfg.StoreTimeout)
 		defer cancelSettle()
 
-		// A previous process can crash after its final allowed claim but before
-		// publish/settlement. The expired lease is then reclaimed with attempts
-		// one past the configured publish budget. Terminalize that recovery claim
-		// without producing another external side effect.
+		// An over-budget claim without explicit retry provenance represents crash
+		// recovery after the final allowed publish attempt. Terminalize it without
+		// creating another external side effect. A one-shot RetryScheduled marker
+		// authorizes exactly the retry that Store.Retry persisted.
 		if failErr := invokeStoreOperation(func() error {
 			return d.store.MarkFailed(settleCtx, event)
 		}); failErr != nil {

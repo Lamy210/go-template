@@ -43,14 +43,15 @@ type Event struct {
 
 // ClaimedEvent is one leased outbox record ready for external dispatch.
 type ClaimedEvent struct {
-	ID          int64
-	EventID     string
-	Subject     string
-	Payload     []byte
-	Traceparent string
-	Tracestate  string
-	Attempts    int
-	LockToken   string
+	ID             int64
+	EventID        string
+	Subject        string
+	Payload        []byte
+	Traceparent    string
+	Tracestate     string
+	Attempts       int
+	LockToken      string
+	RetryScheduled bool
 }
 
 // ClaimConfig bounds one dispatcher claim operation.
