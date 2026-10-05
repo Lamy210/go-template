@@ -5,6 +5,7 @@ ALTER TABLE outbox_events
         locked_until IS NULL
         OR (
             attempts > 0
+            AND lock_token <> ''
             AND NOT retry_scheduled
             AND published_at IS NULL
             AND failed_at IS NULL
