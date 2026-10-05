@@ -22,12 +22,6 @@ func TestOutboxStatePartitionRejectsImpossibleStates(t *testing.T) {
 		sql  string
 	}{
 		{
-			name: "claimed but neither leased nor scheduled",
-			sql: `INSERT INTO outbox_events
-			      (event_id, subject, payload, attempts)
-			      VALUES ($1, 'example.state-partition', ''::bytea, 1)`,
-		},
-		{
 			name: "published without any claim",
 			sql: `INSERT INTO outbox_events
 			      (event_id, subject, payload, published_at)
@@ -56,6 +50,12 @@ func TestOutboxStatePartitionRejectsImpossibleStates(t *testing.T) {
 			sql: `INSERT INTO outbox_events
 			      (event_id, subject, payload)
 			      VALUES ($1, 'example.state-partition', ''::bytea)`,
+		},
+		{
+			name: "legacy unlocked retry-compatible state",
+			sql: `INSERT INTO outbox_events
+			      (event_id, subject, payload, attempts)
+			      VALUES ($1, 'example.state-partition', ''::bytea, 1)`,
 		},
 		{
 			name: "scheduled retry",
