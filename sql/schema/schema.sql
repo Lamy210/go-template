@@ -39,7 +39,18 @@ CREATE TABLE outbox_events (
     failed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (NOT (published_at IS NOT NULL AND failed_at IS NOT NULL)),
-    CHECK ((locked_until IS NULL) = (lock_token IS NULL))
+    CHECK ((locked_until IS NULL) = (lock_token IS NULL)),
+    CONSTRAINT outbox_events_retry_scheduled_state_check
+        CHECK (
+            NOT retry_scheduled
+            OR (
+                attempts > 0
+                AND locked_until IS NULL
+                AND lock_token IS NULL
+                AND published_at IS NULL
+                AND failed_at IS NULL
+            )
+        )
 );
 
 CREATE INDEX outbox_events_dispatch_idx
