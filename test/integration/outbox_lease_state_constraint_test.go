@@ -29,6 +29,13 @@ func TestOutboxLeaseConstraintRejectsImpossibleStates(t *testing.T) {
 			              CURRENT_TIMESTAMP + INTERVAL '1 minute', 'token')`,
 		},
 		{
+			name: "empty lease token",
+			sql: `INSERT INTO outbox_events
+			      (event_id, subject, payload, attempts, locked_until, lock_token)
+			      VALUES ($1, 'example.lease-state', ''::bytea, 1,
+			              CURRENT_TIMESTAMP + INTERVAL '1 minute', '')`,
+		},
+		{
 			name: "published while leased",
 			sql: `INSERT INTO outbox_events
 			      (event_id, subject, payload, attempts, locked_until, lock_token, published_at)
