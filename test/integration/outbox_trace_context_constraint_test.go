@@ -52,9 +52,9 @@ func TestOutboxTraceContextConstraintRequiresParentForState(t *testing.T) {
 			`INSERT INTO outbox_events
 			 (event_id, subject, payload, traceparent, tracestate)
 			 VALUES ($1, 'example.trace-context', ''::bytea, $2, $3)`,
-			t.id,
-			t.traceparent,
-			t.tracestate,
+			tt.id,
+			tt.traceparent,
+			tt.tracestate,
 		); err != nil {
 			t.Fatalf("insert valid trace context state %q: %v", tt.id, err)
 		}
