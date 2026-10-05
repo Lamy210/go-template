@@ -40,6 +40,11 @@ CREATE TABLE outbox_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CHECK (NOT (published_at IS NOT NULL AND failed_at IS NOT NULL)),
     CHECK ((locked_until IS NULL) = (lock_token IS NULL)),
+    CONSTRAINT outbox_events_settled_attempt_check
+        CHECK (
+            (published_at IS NULL AND failed_at IS NULL)
+            OR attempts > 0
+        ),
     CONSTRAINT outbox_events_lease_state_check
         CHECK (
             locked_until IS NULL
