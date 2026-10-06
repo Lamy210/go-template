@@ -26,6 +26,10 @@ func TestHasExplicitServerMatchesPinnedNormalization(t *testing.T) {
 		{raw: "nats://localhost:65536", want: false},
 		{raw: "ws://localhost:65536", want: false},
 		{raw: "nats://127.0.0.1:4222,localhost:0", want: false},
+		{raw: "ws://localhost:8080,nats://localhost:4222", want: false},
+		{raw: "nats://localhost:4222,wss://localhost:443", want: false},
+		{raw: "wss://localhost:443,tls://localhost:4443", want: false},
+		{raw: "ws://localhost:8080,tcp://localhost:4222", want: false},
 		{raw: "nats://127.0.0.1:4222", want: true},
 		{raw: "nats://127.0.0.1:4222/", want: true},
 		{raw: "localhost", want: true},
@@ -34,6 +38,9 @@ func TestHasExplicitServerMatchesPinnedNormalization(t *testing.T) {
 		{raw: "localhost:65535", want: true},
 		{raw: "[::1]:4222", want: true},
 		{raw: "wss://localhost:443/", want: true},
+		{raw: "ws://localhost:8080,wss://localhost:443", want: true},
+		{raw: "nats://localhost:4222,tls://localhost:4443", want: true},
+		{raw: "tcp://localhost:4222,nats://localhost:4223", want: true},
 		{raw: " , nats://127.0.0.1:4222, / ", want: true},
 	}
 
