@@ -29,12 +29,37 @@ func TestClientConfigRejectsURLWithNoExplicitServer(t *testing.T) {
 	}
 }
 
+func TestClientConfigRejectsServerWithoutExplicitHostname(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		":4222",
+		"nats://:4222",
+		"ws://:8080",
+		"nats://",
+		"nats://127.0.0.1:4222,:4333",
+	} {
+		cfg := testClientURLConfig()
+		cfg.URL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want hostname-less server rejected", raw)
+		}
+	}
+}
+
 func TestClientConfigAcceptsURLListWithExplicitServer(t *testing.T) {
 	t.Parallel()
 
-	cfg := testClientURLConfig()
-	cfg.URL = " , nats://127.0.0.1:4222, / "
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("Validate() error = %v, want explicit server accepted", err)
+	for _, raw := range []string{
+		" , nats://127.0.0.1:4222, / ",
+		"localhost:4222",
+		"[::1]:4222",
+		"wss://localhost:443/",
+	} {
+		cfg := testClientURLConfig()
+		cfg.URL = raw
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate(%q) error = %v, want explicit server accepted", raw, err)
+		}
 	}
 }
