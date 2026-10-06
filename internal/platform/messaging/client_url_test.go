@@ -47,12 +47,33 @@ func TestClientConfigRejectsServerWithoutExplicitHostname(t *testing.T) {
 	}
 }
 
+func TestClientConfigRejectsInvalidDestinationPort(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"localhost:0",
+		"nats://localhost:0",
+		"nats://localhost:65536",
+		"ws://localhost:65536",
+		"nats://127.0.0.1:4222,localhost:0",
+	} {
+		cfg := testClientURLConfig()
+		cfg.URL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want invalid destination port rejected", raw)
+		}
+	}
+}
+
 func TestClientConfigAcceptsURLListWithExplicitServer(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
 		" , nats://127.0.0.1:4222, / ",
-		"localhost:4222",
+		"localhost",
+		"localhost:",
+		"localhost:1",
+		"localhost:65535",
 		"[::1]:4222",
 		"wss://localhost:443/",
 	} {
