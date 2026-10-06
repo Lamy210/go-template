@@ -4,6 +4,7 @@ package natsurl
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,10 @@ import (
 // slash, and drops empty entries. If no entry survives, the client inserts its
 // DefaultURL. It also accepts an empty TCP host such as ":4222", which Go dials
 // as the local machine. Requiring a hostname prevents both implicit fallback
-// behaviors when configuration accidentally omits the intended server.
+// behaviors when configuration accidentally omits the intended server. Explicit
+// destination ports must also fit the TCP/UDP port range and be non-zero;
+// omitted ports remain valid because nats.go supplies its scheme-specific
+// default.
 func HasExplicitServer(raw string) bool {
 	found := false
 	for _, entry := range strings.Split(raw, ",") {
@@ -39,6 +43,12 @@ func HasExplicitServer(raw string) bool {
 		parsed, err := url.Parse(candidate)
 		if err != nil || parsed.Hostname() == "" {
 			return false
+		}
+		if port := parsed.Port(); port != "" {
+			value, err := strconv.Atoi(port)
+			if err != nil || value < 1 || value > 65535 {
+				return false
+			}
 		}
 	}
 	return found
