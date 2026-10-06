@@ -38,6 +38,27 @@ func TestNATSValidateRejectsServerWithoutExplicitHostname(t *testing.T) {
 	}
 }
 
+func TestNATSValidateRejectsInvalidDestinationPort(t *testing.T) {
+	t.Parallel()
+
+	base := defaultNATSConfig()
+	base.Enabled = true
+
+	for _, raw := range []string{
+		"localhost:0",
+		"nats://localhost:0",
+		"nats://localhost:65536",
+		"ws://localhost:65536",
+		"nats://127.0.0.1:4222,localhost:0",
+	} {
+		cfg := base
+		cfg.URL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want invalid destination port rejected", raw)
+		}
+	}
+}
+
 func TestNATSValidateAcceptsExplicitHostnames(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +66,10 @@ func TestNATSValidateAcceptsExplicitHostnames(t *testing.T) {
 	base.Enabled = true
 
 	for _, raw := range []string{
-		"localhost:4222",
+		"localhost",
+		"localhost:",
+		"localhost:1",
+		"localhost:65535",
 		"nats://localhost:4222",
 		"[::1]:4222",
 		"wss://localhost:443/",
