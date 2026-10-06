@@ -9,8 +9,8 @@ import (
 )
 
 // HasExplicitServer reports whether raw contains at least one server entry and
-// every surviving entry names an explicit hostname after the normalization used
-// by pinned nats.go v1.54.0 before building its connection pool.
+// every surviving entry matches the connection-pool constraints enforced by
+// pinned nats.go v1.54.0 before network I/O.
 //
 // nats.go splits on commas, trims surrounding whitespace, removes one trailing
 // slash, and drops empty entries. If no entry survives, the client inserts its
@@ -19,9 +19,12 @@ import (
 // behaviors when configuration accidentally omits the intended server. Explicit
 // destination ports must also fit the TCP/UDP port range and be non-zero;
 // omitted ports remain valid because nats.go supplies its scheme-specific
-// default.
+// default. Finally, websocket and non-websocket entries cannot be mixed because
+// nats.go rejects that pool synchronously.
 func HasExplicitServer(raw string) bool {
 	found := false
+	websocketModeSet := false
+	websocketMode := false
 	for _, entry := range strings.Split(raw, ",") {
 		trimmed := strings.TrimSpace(entry)
 		normalized := strings.TrimSuffix(trimmed, "/")
@@ -49,6 +52,14 @@ func HasExplicitServer(raw string) bool {
 			if err != nil || value < 1 || value > 65535 {
 				return false
 			}
+		}
+
+		isWebsocket := parsed.Scheme == "ws" || parsed.Scheme == "wss"
+		if !websocketModeSet {
+			websocketMode = isWebsocket
+			websocketModeSet = true
+		} else if isWebsocket != websocketMode {
+			return false
 		}
 	}
 	return found
