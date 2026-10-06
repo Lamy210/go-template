@@ -26,7 +26,7 @@ func HasExplicitServer(raw string) bool {
 		}
 		found = true
 
-		candidate := normalized
+		var candidate string
 		if strings.Contains(trimmed, "://") {
 			// Parse the pre-normalized form so a scheme-only value such as
 			// "nats://" cannot lose one slash and be reinterpreted as the bare
