@@ -15,10 +15,18 @@ func TestHasExplicitServerMatchesPinnedNormalization(t *testing.T) {
 		{raw: " , ", want: false},
 		{raw: "/", want: false},
 		{raw: " , /, ", want: false},
+		{raw: "//", want: false},
+		{raw: ":4222", want: false},
+		{raw: "nats://:4222", want: false},
+		{raw: "ws://:8080", want: false},
+		{raw: "nats://", want: false},
+		{raw: "nats://127.0.0.1:4222,:4333", want: false},
 		{raw: "nats://127.0.0.1:4222", want: true},
 		{raw: "nats://127.0.0.1:4222/", want: true},
+		{raw: "localhost:4222", want: true},
+		{raw: "[::1]:4222", want: true},
+		{raw: "wss://localhost:443/", want: true},
 		{raw: " , nats://127.0.0.1:4222, / ", want: true},
-		{raw: "//", want: true},
 	}
 
 	for _, tt := range tests {
