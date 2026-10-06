@@ -65,6 +65,23 @@ func TestClientConfigRejectsInvalidDestinationPort(t *testing.T) {
 	}
 }
 
+func TestClientConfigRejectsMixedWebsocketTransportModes(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"ws://localhost:8080,nats://localhost:4222",
+		"nats://localhost:4222,wss://localhost:443",
+		"wss://localhost:443,tls://localhost:4443",
+		"ws://localhost:8080,tcp://localhost:4222",
+	} {
+		cfg := testClientURLConfig()
+		cfg.URL = raw
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("Validate(%q) error = nil, want mixed websocket transport rejected", raw)
+		}
+	}
+}
+
 func TestClientConfigAcceptsURLListWithExplicitServer(t *testing.T) {
 	t.Parallel()
 
@@ -76,6 +93,9 @@ func TestClientConfigAcceptsURLListWithExplicitServer(t *testing.T) {
 		"localhost:65535",
 		"[::1]:4222",
 		"wss://localhost:443/",
+		"ws://localhost:8080,wss://localhost:443",
+		"nats://localhost:4222,tls://localhost:4443",
+		"tcp://localhost:4222,nats://localhost:4223",
 	} {
 		cfg := testClientURLConfig()
 		cfg.URL = raw
