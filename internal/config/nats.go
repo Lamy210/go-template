@@ -9,6 +9,7 @@ import (
 	"github.com/Lamy210/go-template/internal/natsbudget"
 	"github.com/Lamy210/go-template/internal/natsname"
 	"github.com/Lamy210/go-template/internal/natssubject"
+	"github.com/Lamy210/go-template/internal/natsurl"
 )
 
 const (
@@ -230,6 +231,9 @@ func (c NATSConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.URL) == "" {
 		return fmt.Errorf("NATS_URL must not be empty when NATS_ENABLED=true")
+	}
+	if !natsurl.HasExplicitServer(c.URL) {
+		return fmt.Errorf("NATS_URL must contain at least one explicit server")
 	}
 	if c.ConnectTimeout <= 0 {
 		return fmt.Errorf("NATS_CONNECT_TIMEOUT must be positive")

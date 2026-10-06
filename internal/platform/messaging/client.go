@@ -11,6 +11,7 @@ import (
 	coreprop "github.com/Lamy210/go-template/internal/core/propagation"
 	"github.com/Lamy210/go-template/internal/messageid"
 	"github.com/Lamy210/go-template/internal/natssubject"
+	"github.com/Lamy210/go-template/internal/natsurl"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -30,6 +31,9 @@ type ClientConfig struct {
 func (c ClientConfig) Validate() error {
 	if strings.TrimSpace(c.URL) == "" {
 		return errors.New("nats URL must not be empty")
+	}
+	if !natsurl.HasExplicitServer(c.URL) {
+		return errors.New("nats URL must contain at least one explicit server")
 	}
 	if strings.TrimSpace(c.Name) == "" {
 		return errors.New("nats client name must not be empty")
