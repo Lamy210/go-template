@@ -18,7 +18,7 @@ services:
       - postgres-data:/var/lib/postgresql
 
   nats:
-    image: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
+    image: nats:2.15.2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5
     command:
       - "-js"
       - "-m"
